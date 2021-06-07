@@ -1,6 +1,10 @@
+import registrationInterfaceRMI.RegistrationInterface;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.net.InetSocketAddress;
+import java.nio.channels.SocketChannel;
 import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -14,6 +18,7 @@ public class MainClient {
 
     private ArrayList<String> listUsers;
     private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
+    public static int DEFAULT_PORT = 5000;
 
     public MainClient() {
         listOnlineUsers = new ConcurrentHashMap<>();
@@ -74,6 +79,17 @@ public class MainClient {
         }
 
         //CONTACT SERVER
+        try {
+            //connessione del client al server, immediatamente dopo la registrazione
+            SocketChannel clientChannel = SocketChannel.open();
+
+            clientChannel.configureBlocking(false);
+            clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
+
+        } catch (IOException e){
+            e.printStackTrace();
+        }
+
 
     }
 

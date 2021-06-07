@@ -1,4 +1,6 @@
 
+import registrationInterfaceRMI.RegistrationInterface;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -7,17 +9,21 @@ import java.net.ServerSocket;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MainServer extends RemoteServer implements RegistrationInterface {
 
     ConcurrentHashMap<String, String> registeredUsersData = new ConcurrentHashMap<>();
     public static int DEFAULT_PORT = 5000;
+    public static int DEFAULT_PORT_RMI = 3000;
 
     //register a new user
     public  int register (String nickUtente, String password) throws RemoteException{
@@ -47,8 +53,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
             RegistrationInterface stub = (RegistrationInterface) UnicastRemoteObject.exportObject(mainServer, 0);
 
-            LocateRegistry.createRegistry(3000);
-            Registry r = LocateRegistry.getRegistry(3000);
+            LocateRegistry.createRegistry(DEFAULT_PORT_RMI);
+            Registry r = LocateRegistry.getRegistry(DEFAULT_PORT_RMI);
 
             r.rebind("REGISTER", stub);
             System.out.println("Ready for registration");
@@ -86,7 +92,26 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         while (true) {
             try {
                 selector.select();
-                //TODO avviare un nuovo thread che si occupera' del client che ha richiesto la connessione
+            }catch (IOException e){
+                e.printStackTrace();
+                break;
+            }
+
+            Set<SelectionKey> readyKeys = selector.selectedKeys();
+            Iterator<SelectionKey> iterator = readyKeys.iterator();
+
+            while (iterator.hasNext()){
+                SelectionKey key = iterator.next();
+                iterator.remove();
+
+                try {
+                    //accept a connection from a client
+                    if (key.isAcceptable()){
+                        ServerSocketChannel server = (ServerSocketChannel) key.channel();
+                        SocketChannel clientChannel = server.accept();
+                        clientChannel.configureBlocking(false);
+                    }
+                }
             }
         }
 
