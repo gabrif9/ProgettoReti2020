@@ -32,7 +32,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
             if (result==null){
                 try (FileOutputStream resultStream = new FileOutputStream("resultStream");
-                     ObjectOutputStream out = new ObjectOutputStream(resultStream);){
+                     ObjectOutputStream out = new ObjectOutputStream(resultStream)){
                     //serialize the result code
                     RegistrationResult resultCode = new RegistrationResult(200); //code result if the registration was successful
 
@@ -85,35 +85,41 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             selector = Selector.open();
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
+
+            while (true) {
+                try {
+                    selector.select();
+                }catch (IOException e){
+                    e.printStackTrace();
+                    break;
+                }
+
+                Set<SelectionKey> readyKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iterator = readyKeys.iterator();
+
+                while (iterator.hasNext()){
+                    SelectionKey key = iterator.next();
+                    iterator.remove();
+
+                    try {
+                        //accept a connection from a client
+                        if (key.isAcceptable()){
+                            ServerSocketChannel server = (ServerSocketChannel) key.channel();
+                            SocketChannel clientChannel = server.accept();
+                            clientChannel.configureBlocking(false);
+                            System.out.println("connesso con il client");
+                        }
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+
         }catch (IOException e){
             e.printStackTrace();
         }
 
-        while (true) {
-            try {
-                selector.select();
-            }catch (IOException e){
-                e.printStackTrace();
-                break;
-            }
 
-            Set<SelectionKey> readyKeys = selector.selectedKeys();
-            Iterator<SelectionKey> iterator = readyKeys.iterator();
-
-            while (iterator.hasNext()){
-                SelectionKey key = iterator.next();
-                iterator.remove();
-
-                try {
-                    //accept a connection from a client
-                    if (key.isAcceptable()){
-                        ServerSocketChannel server = (ServerSocketChannel) key.channel();
-                        SocketChannel clientChannel = server.accept();
-                        clientChannel.configureBlocking(false);
-                    }
-                }
-            }
-        }
 
     }
 }
