@@ -9,6 +9,7 @@ public class Project {
     private ConcurrentHashMap <String, Card> inProgress;
     private ConcurrentHashMap <String, Card> toBeRevised;
     private ConcurrentHashMap <String, Card> done;
+
     private ArrayList<Card> cards; //cards list
     private ArrayList<String> cardsName; //card's name list
     private ArrayList<String> members; //members list

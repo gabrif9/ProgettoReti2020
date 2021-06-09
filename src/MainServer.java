@@ -107,7 +107,16 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                             ServerSocketChannel server = (ServerSocketChannel) key.channel();
                             SocketChannel clientChannel = server.accept();
                             clientChannel.configureBlocking(false);
+
+                            //register this channel to the selector with 2 operations
+                            clientChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                             System.out.println("connesso con il client");
+
+                        } else if (key.isReadable()){ //if some client ask to do something (like "login", or other methods)
+                            //chiedere se e' possibile usare degli interi per separare i vari comandi
+
+
+                            //TODO avviare un thread e passare al thread le informazioni necessarie per avviare l'operazione richiesta dal client
                         }
                     }catch (IOException e){
                         e.printStackTrace();

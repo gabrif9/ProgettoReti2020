@@ -20,26 +20,128 @@ public class MainClient {
     private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
     public static int DEFAULT_PORT = 5000;
 
+    //CONSTRUCTOR
     public MainClient() {
         listOnlineUsers = new ConcurrentHashMap<>();
         listUsers = new ArrayList<>();
     }
 
-    public void updateListUsers(String nickUtente){
-        listUsers.add(nickUtente);
-    }
+    /**
+     * Comandi possibili da terminale:
+     *
+     * register: avvia il processo di registrazione
+     * login: avvia il processo di login
+     * logout: effettua il logout dalla piattaforma
+     * listUsers: visualizza gli utenti me il loro stato registrati sulla piattaforma
+     * listOnlineUsers: visualizza la lista degli utenti online
+     * listProjects: visualizza la lista dei progetti di cui l'utente e' membro (messaggio: nessun progetto nel caso in cui l'utente non sia membro di nessun progetto
+     * createProject: richiede la creazione di un nuovo progetto
+     * addMember: aggiunge un utente gia' registrato alla piattaforma ad un determinato progetto
+     * showMember: recupera la lista dei membri del progetto
+     * showCards: recupera la lista delle card associate ad un progetto
+     * showCard: recupera le informazioni di una data card di un progetto
+     * addCard: aggiunge una card ad un progetto
+     * moveCard: sposta una card di un progetto da una lista ad un'altra (solo spostamenti consentiti)
+     * getCardHistory: richiede la storia delle card (cronologia degli spostamenti)
+     * readChat: visualizza i messaggi nella chat
+     * sendChatMsg: l'utente invia un messaggio alla chat associata al progetto
+     * cancelProject: un membro del progetto richiede la cancellazione dello stesso
+     */
 
-    public void updateOnlineUsers(String nickUser, String status){
-        listOnlineUsers.replace(nickUser, status);
-    }
+    //comandi da mostrare alla prima connessione
+    String commandTableLoginRegister = ("Select a command by entering the corresponding number and pressing enter\n" +
+            "1 - register \n" +
+            "2 - login\n");
 
-    public static void main(String[] args) {
+
+    //comandi da mostrare dopo il login
+    String commandTableRegisteredUser = ("Select a command by entering the corresponding number and pressing enter\n" +
+            "1 - logout\n" +
+            "2 - listUsers\n" +
+            "3 - listOnlineUsers\n" +
+            "4 - listProjects\n" +
+            "5 - createProject\n" +
+            "6 - addMember\n" +
+            "7 - showMember\n" +
+            "8 - showCards\n" +
+            "9 - showCard\n" +
+            "10 - addCard\n" +
+            "11 - moveCard\n" +
+            "12 - getCardHistory\n" +
+            "13 - readChat\n" +
+            "14 - sendChatMsg\n" +
+            "15 - sendChatMsg\n" +
+            "16 - cancelProject\n");
+
+
+    public static void main (String[]args){
 
         MainClient client = new MainClient();
+        client.beforeLoginCommand();
+
+    }
+
+    public void beforeLoginCommand () {
+        System.out.println(commandTableLoginRegister);
+        Scanner commandNumber = new Scanner(System.in);
+        int command = commandNumber.nextInt();
+        switch (command) {
+            case 1:
+                //stranamente funziona
+                register();
+                afterLoginCommand();
+
+            case 2:
+                //login
+        }
+    }
+
+    public void afterLoginCommand () {
+        System.out.println(commandTableRegisteredUser);
+        Scanner commandNumber = new Scanner(System.in);
+        int command = commandNumber.nextInt();
+        switch (command) {
+            case 1:
+                //logout
+            case 2:
+                //listUsers
+            case 3:
+                //listOnlineUsers
+            case 4:
+                //listProjects
+            case 5:
+                //createProject
+            case 6:
+                //addMember
+            case 7:
+                //showMember
+            case 8:
+                //showCards
+            case 9:
+                //showCard
+            case 10:
+                //addCard
+            case 11:
+                //moveCard
+            case 12:
+                //getCardHistory
+            case 13:
+                //readChat
+            case 14:
+                //sendChatMsg
+            case 15:
+                //sendChatMsg
+            case 16:
+                //cancelProject
+
+
+        }
+    }
+
+    public static void register () {
 
         RegistrationInterface serverObject;
         Remote remoteObject;
-
 
         //REGISTRATION
         try {
@@ -56,7 +158,7 @@ public class MainClient {
 
             //register a new user
             //se l'utente e' gia' registrato entro in un ciclo while dove mi fara' inserire un altro nome utente
-            while (!registerToServer(serverObject, user, password)){
+            while (!registerToServer(serverObject, user, password)) {
                 System.out.println("Nome utente gia' presente");
 
                 System.out.println("Inserire un nuovo nome utente da registrare: ");
@@ -66,9 +168,10 @@ public class MainClient {
                 password = in.nextLine();
             }
 
+
         } catch (RemoteException e) {
             e.printStackTrace();
-        } catch (NotBoundException e){
+        } catch (NotBoundException e) {
             e.printStackTrace();
         }
 
@@ -81,34 +184,33 @@ public class MainClient {
             clientChannel.configureBlocking(false);
             clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
 
-        } catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public static boolean registerToServer(RegistrationInterface serverObject, String user, String password) throws RemoteException{
+    public static boolean registerToServer (RegistrationInterface serverObject, String user, String password) throws RemoteException {
         //register a new user
         try {
             serverObject.register(user, password);
-        } catch (IllegalArgumentException e){
+        } catch (IllegalArgumentException e) {
             return false;
         }
 
 
         //deserialize the object with the resultCode inside
         try (FileInputStream fis = new FileInputStream("resultStream");
-             ObjectInputStream oin = new ObjectInputStream(fis)){
+             ObjectInputStream oin = new ObjectInputStream(fis)) {
 
             RegistrationResult result = (RegistrationResult) oin.readObject();
-            if (result.getResult() == 200){
+            if (result.getResult() == 200) {
                 System.out.println("Registrazione avvenuta con successo!");
                 return true;
             }
-        }catch (IOException | ClassNotFoundException e){
+        } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             return false;
         }
         return true; //non necessario
     }
-
 }
