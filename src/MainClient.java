@@ -4,7 +4,11 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.IntBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
 import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -19,6 +23,7 @@ public class MainClient {
     private ArrayList<String> listUsers;
     private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
     public static int DEFAULT_PORT = 5000;
+    SocketChannel clientChannel;
 
     //CONSTRUCTOR
     public MainClient() {
@@ -55,23 +60,9 @@ public class MainClient {
 
 
     //comandi da mostrare dopo il login
-    String commandTableRegisteredUser = ("Select a command by entering the corresponding number and pressing enter\n" +
-            "1 - logout\n" +
-            "2 - listUsers\n" +
-            "3 - listOnlineUsers\n" +
-            "4 - listProjects\n" +
-            "5 - createProject\n" +
-            "6 - addMember\n" +
-            "7 - showMember\n" +
-            "8 - showCards\n" +
-            "9 - showCard\n" +
-            "10 - addCard\n" +
-            "11 - moveCard\n" +
-            "12 - getCardHistory\n" +
-            "13 - readChat\n" +
-            "14 - sendChatMsg\n" +
-            "15 - sendChatMsg\n" +
-            "16 - cancelProject\n");
+    String commandTableRegisteredUser = ("Select a command by entering the corresponding number and pressing enter\n" + "1 - logout\n" + "2 - listUsers\n" + "3 - listOnlineUsers\n" + "4 - listProjects\n" +
+            "5 - createProject\n" + "6 - addMember\n" + "7 - showMember\n" + "8 - showCards\n" + "9 - showCard\n" + "10 - addCard\n" + "11 - moveCard\n" + "12 - getCardHistory\n" + "13 - readChat\n" + "14 - sendChatMsg\n" +
+            "15 - sendChatMsg\n" + "16 - cancelProject\n");
 
 
     public static void main (String[]args){
@@ -88,11 +79,14 @@ public class MainClient {
         switch (command) {
             case 1:
                 //stranamente funziona
-                register();
-                afterLoginCommand();
+                register(); //metodo che serve per registrare l'utente e che connette il client al server tramite tcp
+                beforeLoginCommand();
 
             case 2:
                 //login
+                while ( (listOnlineUsers = login()) == null);//return the list of user and their current state, null if the user doesn't exist
+
+
         }
     }
 
@@ -138,7 +132,61 @@ public class MainClient {
         }
     }
 
-    public static void register () {
+    public ConcurrentHashMap<String, String> login(){
+        String user, passwd;
+        Scanner in = new Scanner(System.in);
+        System.out.println("Insert your username");
+        user = in.nextLine();
+        System.out.println("Insert your password");
+        passwd = in.nextLine();
+
+        //TODO trovare un modo per non mandare le password in chiaro
+        try {
+            String commandToSend = "login " + user + " " + passwd;
+
+            //alloco spazio sul buffer per la stringa
+
+            Charset charset = Charset.defaultCharset();
+            //converto il bytebuffer in un charbuffer
+            CharBuffer Cbcs = CharBuffer.wrap(commandToSend);
+            ByteBuffer byteCommandToSend = charset.encode(Cbcs);
+
+            byteCommandToSend.compact();
+            byteCommandToSend.flip();
+
+            clientChannel.write(byteCommandToSend);
+        } catch (IOException e){
+            System.err.println("Errore durante la scrittura nel canale");
+        }
+
+        //controllo il risultato della login
+        try {
+            ByteBuffer response = ByteBuffer.allocate(12);
+            while (clientChannel.read(response) != -1){
+                clientChannel.read(response);
+            }
+
+            response.flip();
+
+            int responseCode = response.getInt();
+
+            if (responseCode == 200){
+                //TODO farsi inviare la lista degli utenti registrati e il loro stato dal server
+                /*
+                provare deserializzando la concurrenthashmap serializzata dal server,
+                altrimenti provare con un arraylist di oggetti con due attributi, String name e String stato (potrebbe essere piu' semplice da serializzare ma piu' difficile da
+                rendere sincronizzata
+                 */
+            } else {
+                System.out.println("errore, utente " + user + " non esistente");
+            }
+        }catch (IOException e){
+            System.err.println("Errore durante il login");
+        }
+        return null;
+    }
+
+    public void register () {
 
         RegistrationInterface serverObject;
         Remote remoteObject;
@@ -179,7 +227,7 @@ public class MainClient {
         try {
             //connessione del client al server, immediatamente dopo la registrazione
             System.out.println("connessione al server");
-            SocketChannel clientChannel = SocketChannel.open();
+            clientChannel = SocketChannel.open();
 
             clientChannel.configureBlocking(false);
             clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
@@ -189,7 +237,7 @@ public class MainClient {
         }
     }
 
-    public static boolean registerToServer (RegistrationInterface serverObject, String user, String password) throws RemoteException {
+    public boolean registerToServer (RegistrationInterface serverObject, String user, String password) throws RemoteException {
         //register a new user
         try {
             serverObject.register(user, password);
