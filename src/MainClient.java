@@ -7,6 +7,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.IntBuffer;
+import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.rmi.NotBoundException;
@@ -128,7 +129,6 @@ public class MainClient {
             case 16:
                 //cancelProject
 
-
         }
     }
 
@@ -142,12 +142,11 @@ public class MainClient {
 
         //TODO trovare un modo per non mandare le password in chiaro
         try {
-            String commandToSend = "login " + user + " " + passwd;
+            String commandToSend = "login" + " " + user + " " + passwd;
 
             //alloco spazio sul buffer per la stringa
 
             Charset charset = Charset.defaultCharset();
-            //converto il bytebuffer in un charbuffer
             CharBuffer Cbcs = CharBuffer.wrap(commandToSend);
             ByteBuffer byteCommandToSend = charset.encode(Cbcs);
 
@@ -168,14 +167,14 @@ public class MainClient {
 
             response.flip();
 
-            int responseCode = response.getInt();
+            int responseCode = response.getInt(); //codice in risposta all'operazione di login
 
             if (responseCode == 200){
                 //TODO farsi inviare la lista degli utenti registrati e il loro stato dal server
                 /*
                 provare deserializzando la concurrenthashmap serializzata dal server,
                 altrimenti provare con un arraylist di oggetti con due attributi, String name e String stato (potrebbe essere piu' semplice da serializzare ma piu' difficile da
-                rendere sincronizzata
+                rendere sincronizzata)
                  */
             } else {
                 System.out.println("errore, utente " + user + " non esistente");
@@ -229,36 +228,31 @@ public class MainClient {
             System.out.println("connessione al server");
             clientChannel = SocketChannel.open();
 
-            clientChannel.configureBlocking(false);
+            clientChannel.configureBlocking(true);
             clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
+            System.out.println("connesso al server");
 
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
+    //method to register a new user and verify that it does not already exist
     public boolean registerToServer (RegistrationInterface serverObject, String user, String password) throws RemoteException {
+        String registrationResult = null;
         //register a new user
         try {
-            serverObject.register(user, password);
+            registrationResult = serverObject.register(user, password);
         } catch (IllegalArgumentException e) {
             return false;
         }
 
-
-        //deserialize the object with the resultCode inside
-        try (FileInputStream fis = new FileInputStream("resultStream");
-             ObjectInputStream oin = new ObjectInputStream(fis)) {
-
-            RegistrationResult result = (RegistrationResult) oin.readObject();
-            if (result.getResult() == 200) {
-                System.out.println("Registrazione avvenuta con successo!");
-                return true;
-            }
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
+        if (registrationResult != null){
+            System.out.println("Registration was successful");
+        } else {
             return false;
         }
+
         return true; //non necessario
     }
 }
