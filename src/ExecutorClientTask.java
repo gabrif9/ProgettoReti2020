@@ -4,14 +4,14 @@ import java.nio.channels.SocketChannel;
 
 public class ExecutorClientTask implements Runnable{
 
-    private Project project;
     private String user;
     private SocketChannel clientChannel;
+    private String[] command;
 
-    public ExecutorClientTask(Project project, String user, SocketChannel clientChannel){
+    public ExecutorClientTask(String user, SocketChannel clientChannel, String[] command){
         this.clientChannel = clientChannel;
-        this.project = project;
         this.user = user;
+        this.command = command;
     }
 
     @Override

@@ -30,7 +30,7 @@ public class RMICallbackServerImpl extends RemoteObject implements RMICallbackSe
         else System.out.println("Client not found");
     }
 
-    public synchronized void update(String user, String status) throws RemoteException{doCallbacks(user, status);}
+    public synchronized void update(String user, String status) throws RemoteException {doCallbacks(user, status);}
 
     public synchronized void doCallbacks(String user, String status) throws RemoteException{
         Iterator i = clients.iterator();
@@ -40,7 +40,4 @@ public class RMICallbackServerImpl extends RemoteObject implements RMICallbackSe
             rmiCallbackClient.notifyEventFromServer(user, status);
         }
     }
-
-
-
 }

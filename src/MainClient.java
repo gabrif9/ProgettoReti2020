@@ -1,3 +1,5 @@
+import RMICallbacksInterface.RMICallbackClient;
+import RMICallbacksInterface.RMICallbackServer;
 import registrationInterfaceRMI.RegistrationInterface;
 
 import java.io.FileInputStream;
@@ -6,8 +8,6 @@ import java.io.ObjectInputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.IntBuffer;
-import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.rmi.NotBoundException;
@@ -15,20 +15,24 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.rmi.server.RemoteObject;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Scanner;
-import java.util.concurrent.ConcurrentHashMap;
 
-public class MainClient {
+public class MainClient extends RemoteObject implements RMICallbackClient {
 
+    private RMICallbackClient ROC;
     private ArrayList<String> listUsers;
-    private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
+    private HashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
     public static int DEFAULT_PORT = 5000;
+    public static int DEFAULT_PORT_CALLBACK = 3000;
     SocketChannel clientChannel;
 
     //CONSTRUCTOR
     public MainClient() {
-        listOnlineUsers = new ConcurrentHashMap<>();
+        //listOnlineUsers = new HashMap<>();
         listUsers = new ArrayList<>();
     }
 
@@ -82,12 +86,15 @@ public class MainClient {
                 //stranamente funziona
                 register(); //metodo che serve per registrare l'utente e che connette il client al server tramite tcp
                 beforeLoginCommand();
-
+                break;
             case 2:
                 //login
-                while ( (listOnlineUsers = login()) == null);//return the list of user and their current state, null if the user doesn't exist
-
-
+                while (listOnlineUsers == null) {//return the list of user and their current state, null if the user doesn't exist
+                    listOnlineUsers = login();
+                }
+                registerForCallback();
+                afterLoginCommand();
+                break;
         }
     }
 
@@ -132,13 +139,47 @@ public class MainClient {
         }
     }
 
-    public ConcurrentHashMap<String, String> login(){
+    @Override
+    public void notifyEventFromServer(String user, String status) throws RemoteException {
+        if (listOnlineUsers.containsKey(user)){
+            listOnlineUsers.put(user, status);
+        }else {
+            System.err.println("user not found in listOnlineUsers");
+        }
+    }
+
+    public void registerForCallback(){
+        try {
+            Registry registry = LocateRegistry.getRegistry(DEFAULT_PORT_CALLBACK);
+            String name = "ServerCallback";
+            RMICallbackServer server = (RMICallbackServer) registry.lookup(name);
+
+            ROC = this;
+            RMICallbackClient stub = (RMICallbackClient) UnicastRemoteObject.exportObject(ROC, 0);
+            server.registerForCallback(stub);
+            System.out.println("registered for callback");
+
+        }catch (RemoteException e){
+            e.printStackTrace();
+        }catch (NotBoundException e){
+            System.err.println("ServerCallback not found on registry");
+        }
+
+    }
+
+    public HashMap<String, String> login(){
         String user, passwd;
         Scanner in = new Scanner(System.in);
         System.out.println("Insert your username");
         user = in.nextLine();
         System.out.println("Insert your password");
         passwd = in.nextLine();
+
+        if (clientChannel == null){
+            clientChannel = connectToServer();
+        }
+
+
 
         //TODO trovare un modo per non mandare le password in chiaro
         try {
@@ -160,15 +201,13 @@ public class MainClient {
 
         //controllo il risultato della login
         try {
-            ByteBuffer response = ByteBuffer.allocate(12);
-            while (clientChannel.read(response) != -1){
-                clientChannel.read(response);
-            }
+            ByteBuffer response = ByteBuffer.allocate(24);
+            clientChannel.read(response);
 
             response.flip();
 
             int responseCode = response.getInt(); //codice in risposta all'operazione di login
-
+            System.out.println(responseCode);
             if (responseCode == 200){
                 //TODO farsi inviare la lista degli utenti registrati e il loro stato dal server
                 /*
@@ -176,9 +215,19 @@ public class MainClient {
                 altrimenti provare con un arraylist di oggetti con due attributi, String name e String stato (potrebbe essere piu' semplice da serializzare ma piu' difficile da
                 rendere sincronizzata)
                  */
-            } else {
-                System.out.println("errore, utente " + user + " non esistente");
+                try (FileInputStream fis = new FileInputStream("usersHashmap.ser");
+                     ObjectInputStream usersStatusOIS = new ObjectInputStream(fis)){
+                    return (HashMap) usersStatusOIS.readObject();
+                } catch (ClassNotFoundException e){
+                    e.printStackTrace();
+                }
+
+            } else if (responseCode == 404){
+                System.out.println("error, user " + user + " not found");
+            } else if (responseCode == 400){
+                System.out.println("wrong password");
             }
+
         }catch (IOException e){
             System.err.println("Errore durante il login");
         }
@@ -223,18 +272,8 @@ public class MainClient {
         }
 
         //CONTACT SERVER
-        try {
-            //connessione del client al server, immediatamente dopo la registrazione
-            System.out.println("connessione al server");
-            clientChannel = SocketChannel.open();
+        clientChannel = connectToServer();
 
-            clientChannel.configureBlocking(true);
-            clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
-            System.out.println("connesso al server");
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     //method to register a new user and verify that it does not already exist
@@ -255,4 +294,24 @@ public class MainClient {
 
         return true; //non necessario
     }
+
+    public SocketChannel connectToServer(){
+        try {
+            //connessione del client al server, immediatamente dopo la registrazione
+            SocketChannel clientChannel;
+            System.out.println("connessione al server");
+            clientChannel = SocketChannel.open();
+
+            clientChannel.configureBlocking(true);
+            clientChannel.connect(new InetSocketAddress(DEFAULT_PORT));
+            System.out.println("connesso al server");
+            return clientChannel;
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+
 }
