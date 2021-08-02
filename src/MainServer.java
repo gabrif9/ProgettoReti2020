@@ -1,7 +1,6 @@
 
 import RMICallbacksInterface.RMICallbackServer;
 import RMICallbacksInterface.RMICallbackServerImpl;
-import com.sun.tools.javac.Main;
 import registrationInterfaceRMI.RegistrationInterface;
 
 import java.io.FileOutputStream;
@@ -11,7 +10,6 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.IntBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -24,10 +22,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -36,21 +31,22 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
+    private static MainServer mainServer;
     private static RMICallbackServerImpl ROS;
     private static ThreadPoolExecutor executor;
-    ArrayList<Project> projectList;
+    List<Project> projectList;
     private static ConcurrentHashMap<String, String> registeredUsersData; //hashmap with username and psw
-    private static HashMap<String, String> usersStatus;
-    HashMap<SocketChannel, String> channelBinding; //hashmap that bind a channel with a user
+    private static ConcurrentHashMap<String, String> usersStatus;
+    private static HashMap<SocketChannel, String> channelBinding; //hashmap that bind a channel with a user
     public static int DEFAULT_PORT = 5000;
     public static int DEFAULT_PORT_RMI = 3000;
 
 
     public MainServer(){
-        usersStatus = new HashMap<>();
-        channelBinding = new HashMap<>();
+        usersStatus = new ConcurrentHashMap<String, String>();
+        channelBinding = new HashMap<SocketChannel, String>();
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
-        projectList = new ArrayList<Project>();
+        projectList = Collections.synchronizedList(new ArrayList<Project>());
         registeredUsersData = new ConcurrentHashMap<>();
         try {
            ROS = new RMICallbackServerImpl();
@@ -63,8 +59,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     public static void main(String[] args) {
 
         try {
-            MainServer mainServer = new MainServer();
 
+            mainServer = new MainServer();
             //RMI implementation
 
             //registration
@@ -141,18 +137,23 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                         } else if (key.isReadable()){ //if some client ask to do something (like "login", or other methods)
                             SocketChannel client = (SocketChannel) key.channel();
                             ByteBuffer buffer = ByteBuffer.allocate(1024);
-                            while (client.read(buffer)!=0){ }
+                            int byteRead;
+
+                            while ((byteRead = client.read(buffer))>0){
+                                System.out.println("byte letti= " + byteRead);
+                            }
                             buffer.flip();
 
                             Charset charset = StandardCharsets.UTF_8;
                             CharBuffer charBuffer = charset.decode(buffer);
 
-                            String command = new String(charBuffer.array());
+                             String command = new String(charBuffer.array());
                             String[] arrayStringCommand = command.split(" ");
                             System.out.println(arrayStringCommand[0]);
 
                             //TODO avviare un thread e passare al thread le informazioni necessarie per avviare l'operazione richiesta dal client
                             switch (arrayStringCommand[0].trim()){
+
                                 case "login":
                                     String loginResult = login(arrayStringCommand[1].trim(), arrayStringCommand[2].trim());
                                     System.out.println(loginResult);
@@ -170,6 +171,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                                    System.out.println("Errore durante la scrittura sul channel 'client' ");
                                                }
                                            }
+                                           //add the clientChannel to the hashmap with the user associated
+                                            channelBinding.putIfAbsent(client, arrayStringCommand[1].trim());
                                         break;
 
                                         case "wrong password":
@@ -201,13 +204,23 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                             }
                                             break;
                                     }
-                                break;
+                                    break;
                                     //TODO implementare gli altri comandi da qui
+
+                                case "logout": //no arguments
+                                    //disconnetto l'utente, e aggiorno lo stato tramite callback
+                                    String user = channelBinding.get(client);
+                                    channelBinding.remove(client);
+                                    client.close();
+                                    ROS.update(user, "Offline");
+                                    break;
+
+                                default:
+                                    String userToSend = channelBinding.get(client);
+                                    executor.execute(new ExecutorClientTask(mainServer, userToSend, arrayStringCommand));
                             }
 
 
-                            //start a thread for different command
-                           // executor.execute(new ExecutorClientTask());
                         }
                     }catch (IOException e){
                         key.cancel();
@@ -274,6 +287,22 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 //    public boolean checkUserPsw(String user, String psw){
 //        if (registeredUsersData)
 //    }
+
+    public List<Project> getProjectList(){
+        return projectList;
+    }
+
+    public static ConcurrentHashMap<String, String> getUsersStatus() {
+        return usersStatus;
+    }
+
+    public static HashMap<SocketChannel, String> getChannelBinding() {
+        return channelBinding;
+    }
+
+    public void bindChannel(String user, SocketChannel client){
+        channelBinding.putIfAbsent(client, user);
+    }
 
     //synchronized method for delete a project
     public void deleteProject(){

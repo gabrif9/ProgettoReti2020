@@ -5,6 +5,7 @@ import registrationInterfaceRMI.RegistrationInterface;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.ObjectStreamException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -17,22 +18,22 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.RemoteObject;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Scanner;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MainClient extends RemoteObject implements RMICallbackClient {
 
+    private int loggedIn = 0;
+    private RMICallbackClient stub = null;
     private RMICallbackClient ROC;
     private ArrayList<String> listUsers;
-    private HashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
+    private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
     public static int DEFAULT_PORT = 5000;
     public static int DEFAULT_PORT_CALLBACK = 3000;
     SocketChannel clientChannel;
 
     //CONSTRUCTOR
     public MainClient() {
-        //listOnlineUsers = new HashMap<>();
         listUsers = new ArrayList<>();
     }
 
@@ -80,7 +81,14 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
     public void beforeLoginCommand () {
         System.out.println(commandTableLoginRegister);
         Scanner commandNumber = new Scanner(System.in);
-        int command = commandNumber.nextInt();
+        int command = 0;
+        try {
+            command = commandNumber.nextInt();
+        } catch (InputMismatchException e){
+            System.err.println("Inserisci un numero");
+            beforeLoginCommand();
+        }
+
         switch (command) {
             case 1:
                 //stranamente funziona
@@ -89,12 +97,18 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 break;
             case 2:
                 //login
-                while (listOnlineUsers == null) {//return the list of user and their current state, null if the user doesn't exist
+                while (listOnlineUsers == null && loggedIn == 0) {//return the list of user and their current state, null if the user doesn't exist
                     listOnlineUsers = login();
+
                 }
+                System.out.println(loggedIn);
                 registerForCallback();
                 afterLoginCommand();
                 break;
+
+            default:
+                System.err.println("Command not found");
+                beforeLoginCommand();
         }
     }
 
@@ -105,10 +119,44 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         switch (command) {
             case 1:
                 //logout
+                String logout = "logout";
+                sendCommand(logout);
+                try {
+                    clientChannel.close();
+                }catch (IOException e){
+                    e.printStackTrace();
+                }
+                loggedIn = 0;
+                unregisterForCallback();
+                listOnlineUsers = null;
+                beforeLoginCommand();
+                break;
+
             case 2:
                 //listUsers
+                System.out.println(listOnlineUsers);
+                operationTerminated();
+                break;
+
             case 3:
                 //listOnlineUsers
+                Set<String> users = listOnlineUsers.keySet();
+
+                //Iterator for check the online users on my hashmap with the user and their current status
+                Iterator<String> usersIterator = users.iterator();
+                int countOnlineUsers = 0;
+                System.out.println("Users Online: ");
+                while (usersIterator.hasNext()){
+                    String username = usersIterator.next();
+                    if (listOnlineUsers.get(username).equals("online")){
+                        countOnlineUsers++;
+                        System.out.println(username);
+                    }
+                    System.out.println(countOnlineUsers + " Users online");
+                }
+                operationTerminated();
+                break;
+
             case 4:
                 //listProjects
             case 5:
@@ -135,8 +183,23 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 //sendChatMsg
             case 16:
                 //cancelProject
+            default:
+                System.err.println("command not found");
+                afterLoginCommand();
 
         }
+    }
+
+
+    public void operationTerminated(){
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Press 0 than enter to show the menu'");
+        int commandExit = scanner.nextInt();
+
+        if (commandExit == 0){
+            afterLoginCommand();
+        } else System.err.println("Please press 0 than enter");
+
     }
 
     @Override
@@ -155,7 +218,10 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             RMICallbackServer server = (RMICallbackServer) registry.lookup(name);
 
             ROC = this;
-            RMICallbackClient stub = (RMICallbackClient) UnicastRemoteObject.exportObject(ROC, 0);
+            //se lo stub e' null il client non e' mai stato avviato, altrimenti significa che lo stub e' gia' registrato sul registry
+            if (stub==null){
+                stub = (RMICallbackClient) UnicastRemoteObject.exportObject(ROC, 0);
+            }
             server.registerForCallback(stub);
             System.out.println("registered for callback");
 
@@ -164,10 +230,23 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         }catch (NotBoundException e){
             System.err.println("ServerCallback not found on registry");
         }
-
     }
 
-    public HashMap<String, String> login(){
+    public void unregisterForCallback(){
+        try {
+            Registry registry = LocateRegistry.getRegistry(DEFAULT_PORT_CALLBACK);
+            String name = "ServerCallback";
+            RMICallbackServer server = (RMICallbackServer) registry.lookup(name);
+
+            server.unregisterForCallback(stub);
+        }catch (RemoteException e){
+            e.printStackTrace();
+        }catch (NotBoundException e){
+            System.err.println("ServerCallback not found on registry");
+        }
+    }
+
+    public ConcurrentHashMap<String, String> login(){
         String user, passwd;
         Scanner in = new Scanner(System.in);
         System.out.println("Insert your username");
@@ -175,29 +254,15 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         System.out.println("Insert your password");
         passwd = in.nextLine();
 
-        if (clientChannel == null){
+        if (!clientChannel.isConnected()){
             clientChannel = connectToServer();
         }
 
+        String commandToSend = "login" + " " + user + " " + passwd;
+        sendCommand(commandToSend);
 
 
         //TODO trovare un modo per non mandare le password in chiaro
-        try {
-            String commandToSend = "login" + " " + user + " " + passwd;
-
-            //alloco spazio sul buffer per la stringa
-
-            Charset charset = Charset.defaultCharset();
-            CharBuffer Cbcs = CharBuffer.wrap(commandToSend);
-            ByteBuffer byteCommandToSend = charset.encode(Cbcs);
-
-            byteCommandToSend.compact();
-            byteCommandToSend.flip();
-
-            clientChannel.write(byteCommandToSend);
-        } catch (IOException e){
-            System.err.println("Errore durante la scrittura nel canale");
-        }
 
         //controllo il risultato della login
         try {
@@ -210,6 +275,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             System.out.println(responseCode);
             if (responseCode == 200){
                 //TODO farsi inviare la lista degli utenti registrati e il loro stato dal server
+                loggedIn = 1;
                 /*
                 provare deserializzando la concurrenthashmap serializzata dal server,
                 altrimenti provare con un arraylist di oggetti con due attributi, String name e String stato (potrebbe essere piu' semplice da serializzare ma piu' difficile da
@@ -217,7 +283,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                  */
                 try (FileInputStream fis = new FileInputStream("usersHashmap.ser");
                      ObjectInputStream usersStatusOIS = new ObjectInputStream(fis)){
-                    return (HashMap) usersStatusOIS.readObject();
+                    return (ConcurrentHashMap<String, String>) usersStatusOIS.readObject();
                 } catch (ClassNotFoundException e){
                     e.printStackTrace();
                 }
@@ -273,7 +339,6 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
         //CONTACT SERVER
         clientChannel = connectToServer();
-
     }
 
     //method to register a new user and verify that it does not already exist
@@ -311,6 +376,28 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             e.printStackTrace();
         }
         return null;
+    }
+
+    private void sendCommand(String command){
+        try {
+
+            //alloco spazio sul buffer per la stringa
+
+            Charset charset = Charset.defaultCharset();
+            CharBuffer Cbcs = CharBuffer.wrap(command);
+            ByteBuffer byteCommandToSend = charset.encode(Cbcs);
+
+            byteCommandToSend.compact();
+            byteCommandToSend.flip();
+
+            while (byteCommandToSend.hasRemaining()){
+                clientChannel.write(byteCommandToSend);
+            }
+
+
+        } catch (IOException e){
+            System.err.println("Errore durante la scrittura nel canale");
+        }
     }
 
 
