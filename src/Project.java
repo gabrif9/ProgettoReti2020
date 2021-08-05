@@ -16,6 +16,7 @@ public class Project {
     private String projectName;
 
 
+
     //Constructor
     public Project(String projectName) {
         this.projectName = projectName;
@@ -150,6 +151,19 @@ public class Project {
     public boolean checkCard(){
         if (toDo.isEmpty() && inProgress.isEmpty() && toBeRevised.isEmpty()) return true;
         else return false;
+    }
+
+    //restituisce true se l'user e' membro del progetto, altrimenti false
+    public boolean searchMember(String memberName){
+        if (members.contains(memberName)){
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public String getProjectName() {
+        return projectName;
     }
 
 

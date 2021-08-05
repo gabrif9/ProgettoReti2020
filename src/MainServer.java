@@ -3,6 +3,7 @@ import RMICallbacksInterface.RMICallbackServer;
 import RMICallbacksInterface.RMICallbackServerImpl;
 import registrationInterfaceRMI.RegistrationInterface;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -34,7 +35,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     private static MainServer mainServer;
     private static RMICallbackServerImpl ROS;
     private static ThreadPoolExecutor executor;
-    List<Project> projectList;
+    private static List<Project> projectList; //syncrhonized list
     private static ConcurrentHashMap<String, String> registeredUsersData; //hashmap with username and psw
     private static ConcurrentHashMap<String, String> usersStatus;
     private static HashMap<SocketChannel, String> channelBinding; //hashmap that bind a channel with a user
@@ -147,12 +148,13 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                             Charset charset = StandardCharsets.UTF_8;
                             CharBuffer charBuffer = charset.decode(buffer);
 
-                             String command = new String(charBuffer.array());
-                            String[] arrayStringCommand = command.split(" ");
-                            System.out.println(arrayStringCommand[0]);
+                            String commandArray = new String(charBuffer.array());
+                            String[] arrayStringCommand = commandArray.split(" ");
+                            String command = arrayStringCommand[0].trim();
+                            System.out.println(command);
 
                             //TODO avviare un thread e passare al thread le informazioni necessarie per avviare l'operazione richiesta dal client
-                            switch (arrayStringCommand[0].trim()){
+                            switch (command){
 
                                 case "login":
                                     String loginResult = login(arrayStringCommand[1].trim(), arrayStringCommand[2].trim());
@@ -171,8 +173,10 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                                    System.out.println("Errore durante la scrittura sul channel 'client' ");
                                                }
                                            }
+                                           //send the userslist and their status
+                                            sendSerializedObject(client, usersStatus);
                                            //add the clientChannel to the hashmap with the user associated
-                                            channelBinding.putIfAbsent(client, arrayStringCommand[1].trim());
+                                            channelBinding.put(client, arrayStringCommand[1].trim());
                                         break;
 
                                         case "wrong password":
@@ -215,12 +219,28 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                     ROS.update(user, "Offline");
                                     break;
 
+
+                                case "listProjects": //noArguments
+                                    //create a new list where i'll add all the project with the user as member
+                                    ArrayList<String> listUserProject = new ArrayList<>();
+
+                                    //get username
+                                    String user2 = channelBinding.get(client);
+
+                                    //search for projects of which the user is a member
+                                    for (Project project : projectList){
+                                        if (project.searchMember(user2)){
+                                            listUserProject.add(project.getProjectName());
+                                        }
+                                    }
+
+                                    sendSerializedObject(client, listUserProject);
+                                    break;
+
                                 default:
                                     String userToSend = channelBinding.get(client);
-                                    executor.execute(new ExecutorClientTask(mainServer, userToSend, arrayStringCommand));
+                                    executor.execute(new ExecutorClientTask(mainServer, userToSend, arrayStringCommand, client));
                             }
-
-
                         }
                     }catch (IOException e){
                         key.cancel();
@@ -257,18 +277,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
                 //se lo sono aggiorno lo stato dell'utente da offline a online e restituisco la nuova hashmap con gli stati aggiornati
                 usersStatus.put(user, "online");
-                try{
-                    FileOutputStream fos = new FileOutputStream("usersHashmap.ser");
-                    ObjectOutputStream usersDataOOS = new ObjectOutputStream(fos);
-
-                    usersDataOOS.writeObject(usersStatus);
-                    System.out.println("usersStatus serialized");
-                    fos.close();
-                    usersDataOOS.close();
-
-                    //update all the client with callback
+                try {
                     ROS.update(user, "Online");
-
                 }catch (IOException e){
                     e.printStackTrace();
                 }
@@ -292,6 +302,39 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         return projectList;
     }
 
+    public int searchRegisteredMember(String projectName, String user){
+
+        if (registeredUsersData.containsKey(user)){
+            for (Project project : projectList){
+                if (project.getProjectName().equals(projectName)){
+                    try {
+                        project.addMember(user);
+                    }catch (IllegalArgumentException e){
+                        return 400; //if the user is already a member of this project
+                    }
+                    return 200; //if the user has been added to this project
+                }
+            }
+            return 404; //if the project does not exist
+        }
+        return 405; //if the user does not exist
+
+    }
+
+    public boolean checkProject(String nameProject){
+
+        //get the project list and verify if the project exist
+        projectList = mainServer.getProjectList();
+
+        //verify if the project exist
+        for (Project project : projectList){
+            if (project.getProjectName() == nameProject){
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static ConcurrentHashMap<String, String> getUsersStatus() {
         return usersStatus;
     }
@@ -302,6 +345,34 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     public void bindChannel(String user, SocketChannel client){
         channelBinding.putIfAbsent(client, user);
+    }
+
+    public void addProject(Project project){
+        projectList.add(project);
+    }
+
+
+
+    //send a serialized object
+    public static void sendSerializedObject(SocketChannel clientChannel, Object obj){
+        try {
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
+            objectOutputStream.writeObject(obj);
+            objectOutputStream.flush();
+            byte[] bytesObjectSerialized = byteArrayOutputStream.toByteArray();
+
+
+            //send the obj serialized
+            ByteBuffer byteBuffer = ByteBuffer.allocate(bytesObjectSerialized.length);
+            byteBuffer.put(bytesObjectSerialized);
+            byteBuffer.flip();
+            while (byteBuffer.hasRemaining()){
+                clientChannel.write(byteBuffer);
+            }
+        }catch (IOException e){
+            e.printStackTrace();
+        }
     }
 
     //synchronized method for delete a project

@@ -2,15 +2,13 @@ import RMICallbacksInterface.RMICallbackClient;
 import RMICallbacksInterface.RMICallbackServer;
 import registrationInterfaceRMI.RegistrationInterface;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectStreamException;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -152,17 +150,106 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                         countOnlineUsers++;
                         System.out.println(username);
                     }
-                    System.out.println(countOnlineUsers + " Users online");
                 }
+                System.out.println(countOnlineUsers + " Users online");
                 operationTerminated();
                 break;
 
             case 4:
                 //listProjects
+                ArrayList<String> listUserProject = new ArrayList<>();
+                String command4 = "listProjects";
+                sendCommand(command4);
+
+                try {
+                    ByteBuffer byteReceivedDimension = ByteBuffer.allocate(64);
+                    clientChannel.read(byteReceivedDimension);
+                    byteReceivedDimension.flip();
+                    int byteBufferLenght = byteReceivedDimension.getInt();
+                    System.out.println("byte ricevuti " + byteBufferLenght);
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(byteBufferLenght);
+                    clientChannel.read(byteBuffer);
+
+                    byte[] data = new byte[byteBufferLenght];
+                    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data);
+                    ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+                    listUserProject = (ArrayList<String>) objectInputStream.readObject();
+                    System.out.println(listUserProject);
+
+
+                }catch (IOException e){
+                    System.err.println("Errore durante la deserializzazione in 'listProjects'");
+                }catch (ClassNotFoundException e){
+                    e.printStackTrace();
+                }
+                System.out.println(listUserProject);
+                operationTerminated();
+                break;
+
+
             case 5:
                 //createProject
+                Scanner scanner = new Scanner(System.in);
+                System.out.println("Inserisci il nome del nuovo progetto");
+                String nameProject = scanner.next();
+
+                String command5 = "createProject " + nameProject;
+                sendCommand(command5);
+
+
+                String responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+
+                if (!responseString.equals("OK")){
+                    System.err.println("Progetto gia' esistente");
+                    afterLoginCommand();
+                    break;
+                } else {
+                    System.out.println("Progetto aggiunto correttamente");
+                    operationTerminated();
+                    afterLoginCommand();
+                }
+                break;
+
             case 6:
                 //addMember
+                Scanner scanner1 = new Scanner(System.in);
+                System.out.println("Inserisci il nome del progetto");
+                String nameProject1 = scanner1.next();
+                System.out.println("Inserisci il nome del nuovo membro");
+                String newMember = scanner1.next();
+
+                String command6 = "addMember " + nameProject1 + newMember;
+                sendCommand(command6);
+
+                String responseString1 = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+
+                //analyze the response
+                if (responseString1.equals("OK")){
+                    System.out.println("Utente aggiunto correttamente al progetto");
+                    operationTerminated();
+                    afterLoginCommand();
+                    break;
+                } else if(responseString1.equals("User already member")){
+                    System.err.println("L'utente 'e gia' membro del progetto");
+                    operationTerminated();
+                    afterLoginCommand();
+                    break;
+                } else if (responseString1.equals("project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                    operationTerminated();
+                    afterLoginCommand();
+                    break;
+                } else if (responseString1.equals("User does not exist")){
+                    System.err.println("l'utente non e' registrato");
+                    operationTerminated();
+                    afterLoginCommand();
+                    break;
+                }
+                break;
+
+
+
+
             case 7:
                 //showMember
             case 8:
@@ -191,6 +278,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
     }
 
 
+    //metodo invocato al termine di un'operazione per permettere all'utente di tornare al menu' principale
     public void operationTerminated(){
         Scanner scanner = new Scanner(System.in);
         System.out.println("Press 0 than enter to show the menu'");
@@ -281,10 +369,12 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 altrimenti provare con un arraylist di oggetti con due attributi, String name e String stato (potrebbe essere piu' semplice da serializzare ma piu' difficile da
                 rendere sincronizzata)
                  */
-                try (FileInputStream fis = new FileInputStream("usersHashmap.ser");
-                     ObjectInputStream usersStatusOIS = new ObjectInputStream(fis)){
-                    return (ConcurrentHashMap<String, String>) usersStatusOIS.readObject();
-                } catch (ClassNotFoundException e){
+                try {
+                    ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream());
+                    return (ConcurrentHashMap<String, String>) objectInputStream.readObject();
+                }catch (IOException e){
+                    System.err.println("Errore durante la deserializzazione in 'login'");
+                }catch (ClassNotFoundException e){
                     e.printStackTrace();
                 }
 
@@ -398,6 +488,18 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         } catch (IOException e){
             System.err.println("Errore durante la scrittura nel canale");
         }
+    }
+
+    public ByteBuffer receiveResponse(){
+        //receive the response from server
+        ByteBuffer response = ByteBuffer.allocate(1024);
+        try {
+            clientChannel.read(response);
+            response.flip();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+        return response;
     }
 
 
