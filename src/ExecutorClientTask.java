@@ -1,10 +1,14 @@
 //questa classe si occupera' di gestire i comandi dei vari client
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExecutorClientTask implements Runnable{
@@ -59,12 +63,23 @@ public class ExecutorClientTask implements Runnable{
                 } else if (result == 405){
                     sendResult("User does not exist");
                 }
-
                 break;
 
             case "showMember":
+                String nameProject2 = command[1].trim();
 
-
+                //check if the project exist
+                if (mainServer.checkProject(nameProject2)){
+                    List<Project> projects = mainServer.getProjectList();
+                    int i = 0;
+                    int max = projects.size();
+                    while (i<max && !projects.get(i).getProjectName().equals(nameProject2)){
+                        i++;
+                    }
+                    ArrayList<String> members = projects.get(i).getMembers();
+                    sendResult("OK");
+                    sendSerializedObject(members);
+                } else sendResult("Project not found");
                 break;
 
             case "showCards":
@@ -108,6 +123,29 @@ public class ExecutorClientTask implements Runnable{
 
         } catch (IOException e){
             System.err.println("Errore durante la scrittura nel canale");
+        }
+    }
+
+    //send a serialized object
+    public void sendSerializedObject(Object obj){
+        try {
+            //serialize the object
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
+            objectOutputStream.writeObject(obj);
+            objectOutputStream.flush();
+            byte[] bytesObjectSerialized = byteArrayOutputStream.toByteArray();
+
+
+            //send the obj serialized
+            ByteBuffer byteBuffer = ByteBuffer.allocate(bytesObjectSerialized.length);
+            byteBuffer.put(bytesObjectSerialized);
+            byteBuffer.flip();
+            while (byteBuffer.hasRemaining()){
+                clientChannel.write(byteBuffer);
+            }
+        }catch (IOException e){
+            e.printStackTrace();
         }
     }
 }

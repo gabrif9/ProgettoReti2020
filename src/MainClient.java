@@ -227,31 +227,53 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 if (responseString1.equals("OK")){
                     System.out.println("Utente aggiunto correttamente al progetto");
                     operationTerminated();
-                    afterLoginCommand();
                     break;
                 } else if(responseString1.equals("User already member")){
                     System.err.println("L'utente 'e gia' membro del progetto");
                     operationTerminated();
-                    afterLoginCommand();
                     break;
                 } else if (responseString1.equals("project does not exist")){
                     System.err.println("Il progetto non esiste");
                     operationTerminated();
-                    afterLoginCommand();
                     break;
                 } else if (responseString1.equals("User does not exist")){
                     System.err.println("l'utente non e' registrato");
                     operationTerminated();
-                    afterLoginCommand();
                     break;
                 }
                 break;
 
-
-
-
             case 7:
                 //showMember
+                Scanner scanner2 = new Scanner(System.in);
+                System.out.println("Inserisci il nome del progetto");
+                String name = scanner2.next();
+
+                String command7 = "showMwmber " + name;
+                sendCommand(command7);
+
+                ArrayList<String> members;
+                String result = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                if (result.equals("OK")){
+                    ByteBuffer arrayListMembers = receiveResponse();
+                    arrayListMembers.flip();
+                    try {
+                        byte[] data = new byte[arrayListMembers.capacity()];
+                        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data);
+                        ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+                        members = (ArrayList<String>) objectInputStream.readObject();
+                        System.out.println(members);
+                    } catch (IOException e){
+                        e.printStackTrace();
+                    } catch (ClassNotFoundException e){
+                        e.printStackTrace();
+                    }
+                } else if (result.equals("Projects not found")){
+                    System.err.println("Progetto non trovato");
+                }
+                operationTerminated();
+                break;
+
             case 8:
                 //showCards
             case 9:
