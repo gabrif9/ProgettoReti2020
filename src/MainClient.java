@@ -114,6 +114,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         System.out.println(commandTableRegisteredUser);
         Scanner commandNumber = new Scanner(System.in);
         int command = commandNumber.nextInt();
+        Scanner scanner = new Scanner(System.in);
         switch (command) {
             case 1:
                 //logout
@@ -189,7 +190,6 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
             case 5:
                 //createProject
-                Scanner scanner = new Scanner(System.in);
                 System.out.println("Inserisci il nome del nuovo progetto");
                 String nameProject = scanner.next();
 
@@ -212,11 +212,10 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
             case 6:
                 //addMember
-                Scanner scanner1 = new Scanner(System.in);
                 System.out.println("Inserisci il nome del progetto");
-                String nameProject1 = scanner1.next();
+                String nameProject1 = scanner.next();
                 System.out.println("Inserisci il nome del nuovo membro");
-                String newMember = scanner1.next();
+                String newMember = scanner.next();
 
                 String command6 = "addMember " + nameProject1 + newMember;
                 sendCommand(command6);
@@ -245,9 +244,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
             case 7:
                 //showMember
-                Scanner scanner2 = new Scanner(System.in);
                 System.out.println("Inserisci il nome del progetto");
-                String name = scanner2.next();
+                String name = scanner.next();
 
                 String command7 = "showMwmber " + name;
                 sendCommand(command7);
@@ -257,12 +255,13 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 if (result.equals("OK")){
                     ByteBuffer arrayListMembers = receiveResponse();
                     arrayListMembers.flip();
-                    try {
-                        byte[] data = new byte[arrayListMembers.capacity()];
-                        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data);
-                        ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+                    byte[] data = new byte[arrayListMembers.capacity()];
+                    try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data);
+                         ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);){
+
                         members = (ArrayList<String>) objectInputStream.readObject();
                         System.out.println(members);
+                        operationTerminated();
                     } catch (IOException e){
                         e.printStackTrace();
                     } catch (ClassNotFoundException e){
@@ -270,12 +269,46 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                     }
                 } else if (result.equals("Projects not found")){
                     System.err.println("Progetto non trovato");
+                } else if (result.equals("This user does not belong to the project")){
+                    System.err.println("Non appartieni ai mebri del progetto, solo i membri del progetto possono visionare la lista");
                 }
                 operationTerminated();
                 break;
 
             case 8:
                 //showCards
+                System.out.println("Inserisci il nome del progetto");
+                String nameProject2 = scanner.next();
+
+                String command8 ="showCards " + nameProject2;
+                sendCommand(command8);
+
+                String responseString2 = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                ArrayList<String> cards;
+                if (responseString2.equals("OK")){
+                    ByteBuffer arrayListCardsBuffer = receiveResponse();
+                    arrayListCardsBuffer.flip();
+                    byte[] data1 = new byte[arrayListCardsBuffer.capacity()];
+                    try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data1);
+                         ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);){
+
+                        cards = (ArrayList<String>) objectInputStream.readObject();
+                        System.out.println(cards);
+                        operationTerminated();
+                    }catch (ClassNotFoundException e){
+                        e.printStackTrace();
+                    }catch (IOException e){
+                        System.err.println("Errore durante la deserializzazione");
+                    }
+                } else if (responseString2.equals("This user does not belong to this project")) {
+                    System.err.println("Non fai parte del progetto");
+                } else if (responseString2.equals("Project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                }
+                operationTerminated();
+                break;
+
+
             case 9:
                 //showCard
             case 10:

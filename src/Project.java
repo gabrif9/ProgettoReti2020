@@ -94,7 +94,7 @@ public class Project {
     }
 
 
-    public void addCard(String cardName, String description){
+    public synchronized void addCard(String cardName, String description){
         //check if the card cardName already exist in this project
         if (cardsName.contains(cardName)) throw new IllegalArgumentException("Card already exist");
 
@@ -115,7 +115,7 @@ public class Project {
     }
 
     //add a member if does not already exist
-    public void addMember(String nickUtente){
+    public synchronized void addMember(String nickUtente){
         //check if the member nickUtente already exist in this project
         if (members.contains(nickUtente)) throw new IllegalArgumentException("the user already exist");
 
@@ -124,7 +124,7 @@ public class Project {
     }
 
 
-    public Card getCard(String cardName){
+    public synchronized Card getCard(String cardName){
         //check if the card is in the project
         if (cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not already exist");
 
@@ -137,7 +137,7 @@ public class Project {
     }
 
     //function that search and replace the modified card on cards list
-    private void searchAndRemoveCard(String cardName, Card cTmp){
+    private synchronized void searchAndRemoveCard(String cardName, Card cTmp){
         for (int i = 0; i < cards.size(); i++) {
             if (cards.get(i).getName().equals(cardName)){
                 cards.remove(i);
@@ -154,7 +154,7 @@ public class Project {
     }
 
     //restituisce true se l'user e' membro del progetto, altrimenti false
-    public boolean searchMember(String memberName){
+    public synchronized boolean searchMember(String memberName){
         if (members.contains(memberName)){
             return true;
         } else {

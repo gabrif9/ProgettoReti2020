@@ -321,7 +321,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     }
 
-    public boolean checkProject(String nameProject){
+
+    public Project checkProject(String nameProject){
 
         //get the project list and verify if the project exist
         projectList = mainServer.getProjectList();
@@ -329,10 +330,10 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         //verify if the project exist
         for (Project project : projectList){
             if (project.getProjectName() == nameProject){
-                return true;
+                return project;
             }
         }
-        return false;
+        return null;
     }
 
     public static ConcurrentHashMap<String, String> getUsersStatus() {

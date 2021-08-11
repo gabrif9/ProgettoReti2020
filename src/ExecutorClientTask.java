@@ -31,17 +31,14 @@ public class ExecutorClientTask implements Runnable{
             case "createProject":
                 //get the new project name
                 String nameProject = command[1].trim();
-
+                Project project = null;
 
                 //check if the new project name already exist
-                if (mainServer.checkProject(nameProject)){
+                if ((project = mainServer.checkProject(nameProject))!=null){
                     sendResult("Error project already exist");
                     break;
                 }
-
-                //add the new project
-                Project project = new Project(nameProject);
-                project.addMember(user);
+                project.addMember(user); //add the member that has request the creation of this project
                 mainServer.addProject(project);
                 sendResult("OK");
                 break;
@@ -67,24 +64,34 @@ public class ExecutorClientTask implements Runnable{
 
             case "showMember":
                 String nameProject2 = command[1].trim();
+                Project project1 = null;
 
                 //check if the project exist
-                if (mainServer.checkProject(nameProject2)){
-                    List<Project> projects = mainServer.getProjectList();
-                    int i = 0;
-                    int max = projects.size();
-                    while (i<max && !projects.get(i).getProjectName().equals(nameProject2)){
-                        i++;
+                if ((project1 = mainServer.checkProject(nameProject2))!= null){
+                    if (project1.searchMember(user)){
+                        ArrayList<String> members = project1.getMembers();
+                        sendResult("OK");
+                        sendSerializedObject(members);
+                    } else {
+                        sendResult("This user does not belong to the project");
                     }
-                    ArrayList<String> members = projects.get(i).getMembers();
-                    sendResult("OK");
-                    sendSerializedObject(members);
                 } else sendResult("Project not found");
                 break;
 
             case "showCards":
+                String nameProject3 = command[1].trim();
+                Project project2 = null;
 
-
+                //check if the project exist
+                if ((project2 = mainServer.checkProject(nameProject3))!= null){
+                    if (project2.searchMember(user)){
+                        ArrayList<String> cardsList = project2.getCards();
+                        sendResult("OK");
+                        sendSerializedObject(cardsList);
+                    } else {
+                        sendResult("This user does not belong to this project");
+                    }
+                } else sendResult("Project does not exist");
                 break;
 
             case "showCard":
