@@ -376,6 +376,37 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         }
     }
 
+    public boolean addCard(String cardName, String nameProject, String description){
+        for (Project project : projectList){
+            if (project.getProjectName() == nameProject){
+                //if the card does not already exist
+                try {
+                    project.addCard(cardName, description);
+                    return true;
+                }catch (IllegalArgumentException e){
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    public String moveCard(String nameProject, String cardName,  String srcList, String destList){
+        for (Project project : projectList){
+            if (project.getProjectName().equals(nameProject)){
+                //if the card does not already exist
+                try {
+                    if (project.moveCard(cardName, srcList, destList)){
+                        return "OK";
+                    }
+                }catch (IllegalArgumentException e){
+                    return "Wrong destination";
+                }
+            }
+        }
+        return "Card not found";
+    }
+
     //synchronized method for delete a project
     public void deleteProject(){
         synchronized (projectList){

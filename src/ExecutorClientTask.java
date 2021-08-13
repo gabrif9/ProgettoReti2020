@@ -13,10 +13,12 @@ import java.util.List;
 
 public class ExecutorClientTask implements Runnable{
 
+    private String nameProject;
     private MainServer mainServer;
     private String user;
     private SocketChannel clientChannel;
     private String[] command;
+    private Project project = null;
 
     public ExecutorClientTask(MainServer mainServer, String user, String[] command, SocketChannel clientChannel){
         this.clientChannel = clientChannel;
@@ -30,8 +32,7 @@ public class ExecutorClientTask implements Runnable{
         switch (command[0].trim()){
             case "createProject":
                 //get the new project name
-                String nameProject = command[1].trim();
-                Project project = null;
+                nameProject = command[1].trim();
 
                 //check if the new project name already exist
                 if ((project = mainServer.checkProject(nameProject))!=null){
@@ -46,10 +47,10 @@ public class ExecutorClientTask implements Runnable{
             case "addMember":
 
                 //get the project name
-                String nameProject1 = command[1].trim();
+                nameProject = command[1].trim();
 
                 //check if the project exist
-                int result = mainServer.searchRegisteredMember(nameProject1, user);
+                int result = mainServer.searchRegisteredMember(nameProject, user);
                 if (result == 200){
                     //controllare se newMember e' registrato e non e' membro del progetto
                     sendResult("OK");
@@ -63,13 +64,12 @@ public class ExecutorClientTask implements Runnable{
                 break;
 
             case "showMember":
-                String nameProject2 = command[1].trim();
-                Project project1 = null;
+                nameProject = command[1].trim();
 
                 //check if the project exist
-                if ((project1 = mainServer.checkProject(nameProject2))!= null){
-                    if (project1.searchMember(user)){
-                        ArrayList<String> members = project1.getMembers();
+                if ((project = mainServer.checkProject(nameProject))!= null){
+                    if (project.searchMember(user)){
+                        ArrayList<String> members = project.getMembers();
                         sendResult("OK");
                         sendSerializedObject(members);
                     } else {
@@ -79,13 +79,12 @@ public class ExecutorClientTask implements Runnable{
                 break;
 
             case "showCards":
-                String nameProject3 = command[1].trim();
-                Project project2 = null;
+                nameProject = command[1].trim();
 
                 //check if the project exist
-                if ((project2 = mainServer.checkProject(nameProject3))!= null){
-                    if (project2.searchMember(user)){
-                        ArrayList<String> cardsList = project2.getCards();
+                if ((project = mainServer.checkProject(nameProject))!= null){
+                    if (project.searchMember(user)){
+                        ArrayList<String> cardsList = project.getCards();
                         sendResult("OK");
                         sendSerializedObject(cardsList);
                     } else {
@@ -95,17 +94,95 @@ public class ExecutorClientTask implements Runnable{
                 break;
 
             case "showCard":
+                //verificare che il progetto esista, verificare che l'utente e' memebro di quel progetto, verificare che la card esista e restituirla
+                nameProject = command[1].trim();
+                String cardName = command[2].trim();
+                Card card = null;
 
-
+                //check if the project exist
+                if ((project = mainServer.checkProject(nameProject))!= null){
+                    if (project.searchMember(user)){
+                        if ((card = project.searchCard(cardName))!=null){
+                            sendResult("OK");
+                            sendSerializedObject(card);
+                        } else {
+                            sendResult("Card not found");
+                        }
+                    } else {
+                        sendResult("This user does not belong to this project");
+                    }
+                } else {
+                    sendResult("Project does not exist");
+                }
                 break;
 
             case "addCard":
+            //controllare se il progetto esiste, se l'utente e' membro del progetto e se la card esiste e se non esiste aggiungerla
 
+                nameProject = command[1].trim();
+                String cardName2 = command[2].trim();
 
+                //obtain the description from the command array
+                String cardDescription = null;
+                for (int i = 3; i<command.length; i++){
+                    cardDescription += command[i] + " ";
+                }
+                Card card2 = new Card(cardName2, cardDescription);
+
+                //check if the project exist
+                if ((project = mainServer.checkProject(nameProject))!= null){
+                    if (project.searchMember(user)){
+                        boolean resultOperation = mainServer.addCard(cardName2, nameProject, cardDescription);
+                        if (resultOperation){
+                            sendResult("OK");
+                        } else sendResult("Card already exist");
+                    } else {
+                        sendResult("This user does not belong to this project");
+                    }
+                } else {
+                    sendResult("Project does not exist");
+                }
                 break;
 
             case "moveCard":
+                //controllare se il progetto esiste, se l'utente e' membro e se la card e' nella lista di partenza, in tal caso spostare la card
+                nameProject = command[1];
+                String cardName3 = command[2];
+                String srcList = command[3];
+                String destList = command[4];
+                String resultMoveOperation;
 
+                //check if the project exist and user belong to the project
+                if ((project = mainServer.checkProject(nameProject))!= null) {
+                    if (project.searchMember(user)) {
+                        resultMoveOperation = mainServer.moveCard(nameProject, cardName3, srcList, destList);
+                        sendResult(resultMoveOperation);
+                    } else {
+                        sendResult("This user does not belong to this project");
+                    }
+                } else {
+                    sendResult("Project does not exist");
+                }
+                break;
+
+            case "getCardHistory":
+                nameProject = command[1];
+                String cardName4 = command[2];
+
+                //check if the project exist and user belong to the project
+                if ((project = mainServer.checkProject(nameProject))!= null) {
+                    if (project.searchMember(user)) {
+                        try {
+                            Card cardTmp = project.getCard(cardName4);
+                            sendResult("OK");
+                            sendSerializedObject(cardTmp.getCardHistory());
+                        } catch (IllegalArgumentException e){
+                            sendResult("Card not found");
+                        }
+                    } else sendResult("This user does not belong to this project");
+                }else {
+                    sendResult("Project does not exist");
+                }
 
                 break;
         }

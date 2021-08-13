@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MainClient extends RemoteObject implements RMICallbackClient {
 
+    private String nameProject;
     private int loggedIn = 0;
     private RMICallbackClient stub = null;
     private RMICallbackClient ROC;
@@ -112,9 +113,10 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
     public void afterLoginCommand () {
         System.out.println(commandTableRegisteredUser);
-        Scanner commandNumber = new Scanner(System.in);
-        int command = commandNumber.nextInt();
         Scanner scanner = new Scanner(System.in);
+        int command = scanner.nextInt();
+        String commandToSend;
+        String responseString;
         switch (command) {
             case 1:
                 //logout
@@ -159,8 +161,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             case 4:
                 //listProjects
                 ArrayList<String> listUserProject = new ArrayList<>();
-                String command4 = "listProjects";
-                sendCommand(command4);
+                commandToSend = "listProjects";
+                sendCommand(commandToSend);
 
                 try {
                     ByteBuffer byteReceivedDimension = ByteBuffer.allocate(64);
@@ -191,13 +193,13 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             case 5:
                 //createProject
                 System.out.println("Inserisci il nome del nuovo progetto");
-                String nameProject = scanner.next();
+                nameProject = scanner.next();
 
-                String command5 = "createProject " + nameProject;
-                sendCommand(command5);
+                commandToSend = "createProject " + nameProject;
+                sendCommand(commandToSend);
 
 
-                String responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
 
                 if (!responseString.equals("OK")){
                     System.err.println("Progetto gia' esistente");
@@ -213,29 +215,29 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             case 6:
                 //addMember
                 System.out.println("Inserisci il nome del progetto");
-                String nameProject1 = scanner.next();
+                nameProject = scanner.next();
                 System.out.println("Inserisci il nome del nuovo membro");
                 String newMember = scanner.next();
 
-                String command6 = "addMember " + nameProject1 + newMember;
-                sendCommand(command6);
+                commandToSend = "addMember " + nameProject + newMember;
+                sendCommand(commandToSend);
 
-                String responseString1 = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
 
                 //analyze the response
-                if (responseString1.equals("OK")){
+                if (responseString.equals("OK")){
                     System.out.println("Utente aggiunto correttamente al progetto");
                     operationTerminated();
                     break;
-                } else if(responseString1.equals("User already member")){
+                } else if(responseString.equals("User already member")){
                     System.err.println("L'utente 'e gia' membro del progetto");
                     operationTerminated();
                     break;
-                } else if (responseString1.equals("project does not exist")){
+                } else if (responseString.equals("project does not exist")){
                     System.err.println("Il progetto non esiste");
                     operationTerminated();
                     break;
-                } else if (responseString1.equals("User does not exist")){
+                } else if (responseString.equals("User does not exist")){
                     System.err.println("l'utente non e' registrato");
                     operationTerminated();
                     break;
@@ -247,8 +249,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 System.out.println("Inserisci il nome del progetto");
                 String name = scanner.next();
 
-                String command7 = "showMwmber " + name;
-                sendCommand(command7);
+                commandToSend = "showMwmber " + name;
+                sendCommand(commandToSend);
 
                 ArrayList<String> members;
                 String result = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
@@ -278,14 +280,14 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             case 8:
                 //showCards
                 System.out.println("Inserisci il nome del progetto");
-                String nameProject2 = scanner.next();
+                nameProject = scanner.next();
 
-                String command8 ="showCards " + nameProject2;
-                sendCommand(command8);
+                commandToSend ="showCards " + nameProject;
+                sendCommand(commandToSend);
 
-                String responseString2 = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
                 ArrayList<String> cards;
-                if (responseString2.equals("OK")){
+                if (responseString.equals("OK")){
                     ByteBuffer arrayListCardsBuffer = receiveResponse();
                     arrayListCardsBuffer.flip();
                     byte[] data1 = new byte[arrayListCardsBuffer.capacity()];
@@ -300,9 +302,9 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                     }catch (IOException e){
                         System.err.println("Errore durante la deserializzazione");
                     }
-                } else if (responseString2.equals("This user does not belong to this project")) {
+                } else if (responseString.equals("This user does not belong to this project")) {
                     System.err.println("Non fai parte del progetto");
-                } else if (responseString2.equals("Project does not exist")){
+                } else if (responseString.equals("Project does not exist")){
                     System.err.println("Il progetto non esiste");
                 }
                 operationTerminated();
@@ -311,12 +313,135 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
             case 9:
                 //showCard
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+                System.out.println("Inserisci il nome della card");
+                String cardName = scanner.next();
+
+                commandToSend = "showCard " + nameProject + " " + cardName;
+                sendCommand(commandToSend);
+
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                Card cardReceived = null;
+
+                if (responseString.equals("OK")){
+                    ByteBuffer byteBufferCard = receiveResponse();
+                    byteBufferCard.flip();
+                    byte data2[] = new byte[byteBufferCard.capacity()];
+
+                    try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data2);
+                         ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream)) {
+
+                        cardReceived = (Card) objectInputStream.readObject();
+                        System.out.println("Nome card: " + cardReceived.getName());
+                        System.out.println("Descrizione: " + cardReceived.getDescription());
+                        System.out.println("Posizione: " + cardReceived.getCardPosition());
+
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }catch (ClassNotFoundException e){
+                        e.printStackTrace();
+                    }
+                } else if (responseString.equals("Card not found")){
+                    System.err.println("Carta non trovata");
+                } else if (responseString.equals("This user does not belong to this project")){
+                    System.err.println("Non fai parte del progetto");
+                } else if (responseString.equals("Project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                }
+                operationTerminated();
+
             case 10:
                 //addCard
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+                System.out.println("Inserisci il nome della card");
+                String cardName2 = scanner.next();
+                System.out.println("Inserire una descrizione");
+                String description = scanner.next();
+
+                commandToSend = "addCard " + nameProject  + " " + cardName2   + " " + description;
+                sendCommand(commandToSend);
+
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+
+                if (responseString.equals("OK")){
+                    System.out.println("Carta aggiunta con successo");
+                } else if (responseString.equals("Card already exist")){
+                    System.err.println("La carta esiste gia'");
+                } else if (responseString.equals("This user does not belong to this project")){
+                    System.err.println("Non fai parte del progetto");
+                } else if (responseString.equals("Project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                }
+                operationTerminated();
+                break;
+
             case 11:
                 //moveCard
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+                System.out.println("Inserisci il nome della card");
+                String cardName3 = scanner.next();
+                System.out.println("Inserire la lista di partenza");
+                String srcList = scanner.next();
+                System.out.println("Inserire la lista di destinazione");
+                String destList = scanner.next();
+
+                commandToSend = "moveCard " + nameProject + " " + cardName3 + " " + srcList + " " + destList;
+                sendCommand(commandToSend);
+
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                if (responseString.equals("OK")){
+                    System.out.println("Carta spostata correttamente");
+                }else if (responseString.equals("Wrong destination")){
+                    System.err.println("Non puoi spostare una card da " + srcList + " a " + destList);
+                }else if (responseString.equals("Card not found")){
+                    System.err.println("Carta non trovata");
+                } else if (responseString.equals("This user does not belong to this project")){
+                    System.err.println("Non fai parte del progetto");
+                } else if (responseString.equals("Project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                }
+                operationTerminated();
+                break;
+
             case 12:
                 //getCardHistory
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+                System.out.println("Inserisci il nome della card");
+                String cardName4 = scanner.next();
+
+                commandToSend = "getcardHistory " + nameProject + " " + cardName4;
+                sendCommand(commandToSend);
+
+                responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                if (responseString.equals("OK")){
+                    //receive and deserialize the arrayList with the card history
+                    ByteBuffer byteBufferCardHistory = receiveResponse();
+                    byte data2[] = new byte[byteBufferCardHistory.capacity()];
+
+                    try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data2);
+                         ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream)){
+
+                        ArrayList<String> cardHistory = (ArrayList<String>) objectInputStream.readObject();
+                        System.out.println(cardHistory);
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }catch (ClassNotFoundException e){
+                        e.printStackTrace();
+                    }
+
+                }else if (responseString.equals("Card not found")){
+                    System.err.println("Carta non trovata");
+                } else if (responseString.equals("This user does not belong to this project")){
+                    System.err.println("Non fai parte del progetto");
+                } else if (responseString.equals("Project does not exist")){
+                    System.err.println("Il progetto non esiste");
+                }
+                operationTerminated();
+
             case 13:
                 //readChat
             case 14:
@@ -345,6 +470,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
     }
 
+
+    //Callback operation
     @Override
     public void notifyEventFromServer(String user, String status) throws RemoteException {
         if (listOnlineUsers.containsKey(user)){
@@ -388,6 +515,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             System.err.println("ServerCallback not found on registry");
         }
     }
+
 
     public ConcurrentHashMap<String, String> login(){
         String user, passwd;

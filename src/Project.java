@@ -45,7 +45,7 @@ public class Project {
                     searchAndRemoveCard(cardName, cTmp);
                     inProgress.putIfAbsent(cTmp.getName(), cTmp);
                     return true;
-                } else return false;
+                } else return false; //return false if the card is not in the "listaPartenza"
 
             case "INPROGRESS":
                 //check if the card cardName is inside the inProgress list
@@ -60,7 +60,7 @@ public class Project {
                         toBeRevised.putIfAbsent(cTmp.getName(), cTmp);
                         return true;
 
-                    } else if (listaDestinazione.toUpperCase().equals("DONE")) {
+                    } else if (listaDestinazione.equalsIgnoreCase("DONE")) {
                             done.putIfAbsent(cTmp.getName(), cTmp);
                             return true;
                         }
@@ -104,15 +104,6 @@ public class Project {
         toDo.put(cardName, cTmp);
     }
 
-    //"showMembers" function, return the member's list of this project
-    public ArrayList<String> getMembers(){
-        return members;
-    }
-
-    //return the cards of this project
-    public ArrayList<String> getCards() {
-        return cardsName;
-    }
 
     //add a member if does not already exist
     public synchronized void addMember(String nickUtente){
@@ -126,9 +117,9 @@ public class Project {
 
     public synchronized Card getCard(String cardName){
         //check if the card is in the project
-        if (cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not already exist");
+        if (cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not exist");
 
-        //
+        //search and return that card
         for (int i = 0; i < cards.size(); i++) {
             Card cTmp = cards.get(i);
             if (cTmp.getName().equals(cardName)) return cTmp;
@@ -147,6 +138,19 @@ public class Project {
     }
 
 
+    //search and return the card cardName
+    public synchronized Card searchCard(String cardName){
+        if (cardName.contains(cardName)){
+            for (Card card : cards){
+                if (card.getName().equals(cardName)){
+                    return card;
+                }
+            }
+        }
+        return null;
+    }
+
+
     //check if all the card are in the done list
     public boolean checkCard(){
         if (toDo.isEmpty() && inProgress.isEmpty() && toBeRevised.isEmpty()) return true;
@@ -162,8 +166,70 @@ public class Project {
         }
     }
 
+    //"showMembers" function, return the member's list of this project
+    public ArrayList<String> getMembers(){
+        return members;
+    }
+
+    //return the cards of this project
+    public ArrayList<String> getCards() {
+        return cardsName;
+    }
+
     public String getProjectName() {
         return projectName;
+    }
+
+    public void setToDo(ConcurrentHashMap<String, Card> toDo) {
+        this.toDo = toDo;
+    }
+
+    public void setInProgress(ConcurrentHashMap<String, Card> inProgress) {
+        this.inProgress = inProgress;
+    }
+
+    public void setToBeRevised(ConcurrentHashMap<String, Card> toBeRevised) {
+        this.toBeRevised = toBeRevised;
+    }
+
+    public void setDone(ConcurrentHashMap<String, Card> done) {
+        this.done = done;
+    }
+
+    public void setCards(ArrayList<Card> cards) {
+        this.cards = cards;
+    }
+
+    public void setCardsName(ArrayList<String> cardsName) {
+        this.cardsName = cardsName;
+    }
+
+    public void setMembers(ArrayList<String> members) {
+        this.members = members;
+    }
+
+    public void setProjectName(String projectName) {
+        this.projectName = projectName;
+    }
+
+    public ConcurrentHashMap<String, Card> getToDo() {
+        return toDo;
+    }
+
+    public ConcurrentHashMap<String, Card> getInProgress() {
+        return inProgress;
+    }
+
+    public ConcurrentHashMap<String, Card> getToBeRevised() {
+        return toBeRevised;
+    }
+
+    public ConcurrentHashMap<String, Card> getDone() {
+        return done;
+    }
+
+    public ArrayList<String> getCardsName() {
+        return cardsName;
     }
 
 
