@@ -151,9 +151,9 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                             String commandArray = new String(charBuffer.array());
                             String[] arrayStringCommand = commandArray.split(" ");
                             String command = arrayStringCommand[0].trim();
-                            System.out.println(command);
+                            //System.out.println(command);
 
-                            //TODO avviare un thread e passare al thread le informazioni necessarie per avviare l'operazione richiesta dal client
+
                             switch (command){
 
                                 case "login":
@@ -209,7 +209,6 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                             break;
                                     }
                                     break;
-                                    //TODO implementare gli altri comandi da qui
 
                                 case "logout": //no arguments
                                     //disconnetto l'utente, e aggiorno lo stato tramite callback
@@ -221,7 +220,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
                                 case "listProjects": //noArguments
-                                    //create a new list where i'll add all the project with the user as member
+                                    //create a new Arraylist where i'll add all the project with the user as member
                                     ArrayList<String> listUserProject = new ArrayList<>();
 
                                     //get username
@@ -298,15 +297,30 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 //        if (registeredUsersData)
 //    }
 
+    /**
+     * @return the list of projects
+     */
     public List<Project> getProjectList(){
         return projectList;
     }
 
+
+
+    /**
+     *
+     * @param projectName project where the user will have to be added
+     * @param user user to add to this project
+     * @return 400 if the user is a member of the project
+     * @return 200 if the user has been added to this project
+     * @return 404 if the project does not exist
+     * @return 405 if the user does not exist
+     */
     public int searchRegisteredMember(String projectName, String user){
 
         if (registeredUsersData.containsKey(user)){
             for (Project project : projectList){
-                if (project.getProjectName().equals(projectName)){
+                System.out.println(projectName);
+                if (project.getProjectName().trim().equals(projectName)){
                     try {
                         project.addMember(user);
                     }catch (IllegalArgumentException e){
@@ -318,7 +332,6 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             return 404; //if the project does not exist
         }
         return 405; //if the user does not exist
-
     }
 
 
@@ -329,7 +342,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
         //verify if the project exist
         for (Project project : projectList){
-            if (project.getProjectName() == nameProject){
+            if (project.getProjectName().equals(nameProject)){
                 return project;
             }
         }
@@ -360,12 +373,12 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
             objectOutputStream.writeObject(obj);
-            objectOutputStream.flush();
             byte[] bytesObjectSerialized = byteArrayOutputStream.toByteArray();
 
 
             //send the obj serialized
             ByteBuffer byteBuffer = ByteBuffer.allocate(bytesObjectSerialized.length);
+            System.out.println("lunghezza buffer con oggetto serializzato = " + bytesObjectSerialized.length);
             byteBuffer.put(bytesObjectSerialized);
             byteBuffer.flip();
             while (byteBuffer.hasRemaining()){
@@ -378,7 +391,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     public boolean addCard(String cardName, String nameProject, String description){
         for (Project project : projectList){
-            if (project.getProjectName() == nameProject){
+            if (project.getProjectName().equals(nameProject)){
                 //if the card does not already exist
                 try {
                     project.addCard(cardName, description);

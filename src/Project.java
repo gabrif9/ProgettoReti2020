@@ -20,6 +20,7 @@ public class Project {
     //Constructor
     public Project(String projectName) {
         this.projectName = projectName;
+        cards = new ArrayList<>();
         toDo = new ConcurrentHashMap();
         inProgress = new ConcurrentHashMap();
         toBeRevised = new ConcurrentHashMap();
@@ -100,6 +101,8 @@ public class Project {
 
         //add the card
         Card cTmp = new Card(cardName, description);
+        cTmp.putMovement("toDo");
+        cards.add(cTmp);
         cardsName.add(cardName);
         toDo.put(cardName, cTmp);
     }
@@ -117,7 +120,7 @@ public class Project {
 
     public synchronized Card getCard(String cardName){
         //check if the card is in the project
-        if (cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not exist");
+        if (!cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not exist");
 
         //search and return that card
         for (int i = 0; i < cards.size(); i++) {

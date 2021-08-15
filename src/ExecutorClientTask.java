@@ -39,6 +39,7 @@ public class ExecutorClientTask implements Runnable{
                     sendResult("Error project already exist");
                     break;
                 }
+                project = new Project(nameProject);
                 project.addMember(user); //add the member that has request the creation of this project
                 mainServer.addProject(project);
                 sendResult("OK");
@@ -48,9 +49,8 @@ public class ExecutorClientTask implements Runnable{
 
                 //get the project name
                 nameProject = command[1].trim();
-
                 //check if the project exist
-                int result = mainServer.searchRegisteredMember(nameProject, user);
+                int result = mainServer.searchRegisteredMember(nameProject, command[2]);
                 if (result == 200){
                     //controllare se newMember e' registrato e non e' membro del progetto
                     sendResult("OK");
@@ -123,10 +123,9 @@ public class ExecutorClientTask implements Runnable{
                 String cardName2 = command[2].trim();
 
                 //obtain the description from the command array
-                String cardDescription = null;
-                for (int i = 3; i<command.length; i++){
-                    cardDescription += command[i] + " ";
-                }
+                String cardDescription = command[3];
+
+                //new card to add
                 Card card2 = new Card(cardName2, cardDescription);
 
                 //check if the project exist
@@ -173,7 +172,9 @@ public class ExecutorClientTask implements Runnable{
                 if ((project = mainServer.checkProject(nameProject))!= null) {
                     if (project.searchMember(user)) {
                         try {
+                            System.out.println("nome carta = " + cardName4);
                             Card cardTmp = project.getCard(cardName4);
+                            System.out.println("Sono dentro il blocco try di getCardHistory");
                             sendResult("OK");
                             sendSerializedObject(cardTmp.getCardHistory());
                         } catch (IllegalArgumentException e){
