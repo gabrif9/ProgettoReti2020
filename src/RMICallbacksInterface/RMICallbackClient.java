@@ -7,4 +7,7 @@ import java.rmi.RemoteException;
 public interface RMICallbackClient extends Remote {
 
     public void notifyEventFromServer(String user, String status) throws RemoteException;
+    public void addedToNewProjectevent(String project, String MIPAddress) throws RemoteException;
+    public void projectRemoved(String nameProject) throws RemoteException;
+
 }

@@ -1,8 +1,15 @@
+import java.net.InetAddress;
+import java.net.MulticastSocket;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Project {
+
+    //Multicast IP chat
+    private String MIPAddress = null;
+    private ArrayList<String> messageHistory;
 
     //An hashmap foreach card list
     private ConcurrentHashMap <String, Card> toDo;
@@ -16,7 +23,6 @@ public class Project {
     private String projectName;
 
 
-
     //Constructor
     public Project(String projectName) {
         this.projectName = projectName;
@@ -27,6 +33,7 @@ public class Project {
         done = new ConcurrentHashMap();
         cardsName = new ArrayList<>();
         members = new ArrayList<>();
+        messageHistory = new ArrayList<>();
     }
 
     //move the card identified by cardName from listaPartenza to listaDestinazione
@@ -169,6 +176,11 @@ public class Project {
         }
     }
 
+    //add a message in the message history
+    public void addMessage(String message){
+        messageHistory.add(message);
+    }
+
     //"showMembers" function, return the member's list of this project
     public ArrayList<String> getMembers(){
         return members;
@@ -235,5 +247,20 @@ public class Project {
         return cardsName;
     }
 
+    public String getMIPAddress() {
+        return MIPAddress;
+    }
+
+    public void setMIPAddress(String MIPAddress) {
+            this.MIPAddress = MIPAddress;
+    }
+
+    public ArrayList<String> getMessageHistory() {
+        return messageHistory;
+    }
+
+    public void setMessageHistory(ArrayList<String> messageHistory) {
+        this.messageHistory = messageHistory;
+    }
 
 }

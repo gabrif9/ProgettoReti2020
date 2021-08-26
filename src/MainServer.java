@@ -4,11 +4,9 @@ import RMICallbacksInterface.RMICallbackServerImpl;
 import registrationInterfaceRMI.RegistrationInterface;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
@@ -32,10 +30,12 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
+    private MIPManager mipManager;
     private static MainServer mainServer;
     private static RMICallbackServerImpl ROS;
     private static ThreadPoolExecutor executor;
     private static List<Project> projectList; //syncrhonized list
+    private static ConcurrentHashMap<String, ArrayList<Project>> projectMemberBinding; //hashmap that bind a member with his project
     private static ConcurrentHashMap<String, String> registeredUsersData; //hashmap with username and psw
     private static ConcurrentHashMap<String, String> usersStatus;
     private static HashMap<SocketChannel, String> channelBinding; //hashmap that bind a channel with a user
@@ -46,9 +46,11 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     public MainServer(){
         usersStatus = new ConcurrentHashMap<String, String>();
         channelBinding = new HashMap<SocketChannel, String>();
+        projectMemberBinding = new ConcurrentHashMap<String, ArrayList<Project>>();
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
         projectList = Collections.synchronizedList(new ArrayList<Project>());
         registeredUsersData = new ConcurrentHashMap<>();
+        mipManager = new MIPManager();
         try {
            ROS = new RMICallbackServerImpl();
         }catch (RemoteException e){
@@ -60,8 +62,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     public static void main(String[] args) {
 
         try {
-
             mainServer = new MainServer();
+
             //RMI implementation
 
             //registration
@@ -177,6 +179,23 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                             sendSerializedObject(client, usersStatus);
                                            //add the clientChannel to the hashmap with the user associated
                                             channelBinding.put(client, arrayStringCommand[1].trim());
+
+                                            //arraylist with all the ip multicast of the projects with the user as a member
+                                            HashMap<String, String> IPBinding = new HashMap<>();
+
+                                            //send the ip multicast of the projects of this member if the member is in some projects
+                                            if (projectMemberBinding.containsKey(arrayStringCommand[1])) {
+
+                                                //get the arraylist of projects with the user as a member
+                                                ArrayList<Project> tmpProjectList = projectMemberBinding.get(arrayStringCommand[1]);
+
+                                                for (Project project : tmpProjectList) {
+                                                    IPBinding.putIfAbsent(project.getProjectName(), project.getMIPAddress());
+                                                }
+
+                                                sendSerializedObject(client, IPBinding);
+                                            }
+
                                         break;
 
                                         case "wrong password":
@@ -236,6 +255,32 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                     sendSerializedObject(client, listUserProject);
                                     break;
 
+                                case "cancelProject":
+                                    String user5 = channelBinding.get(client);
+                                    String nameProject3 = arrayStringCommand[1];
+                                    Project project2 = mainServer.checkProject(nameProject3);
+
+                                    if (project2!=null) {
+                                        if (project2.searchMember(user5)) {
+                                            if (project2.checkCard()){
+                                                for (String member : project2.getMembers()){
+                                                    ROS.doCallbacksProjectremoved(member, nameProject3);
+                                                }
+                                                projectList.remove(project2);
+                                                //inviare una risposta al client
+                                                mainServer.sendResult("Project deleted", client);
+                                            } else {
+                                                mainServer.sendResult("Cannot delete the project, the cards are not all in the toDoList", client);
+                                                }
+                                            } else {
+                                            mainServer.sendResult("You are not part of the project", client);
+                                        }
+                                    } else {
+                                        mainServer.sendResult("project not found", client);
+                                    }
+                                    break;
+
+
                                 default:
                                     String userToSend = channelBinding.get(client);
                                     executor.execute(new ExecutorClientTask(mainServer, userToSend, arrayStringCommand, client));
@@ -275,7 +320,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             if (registeredUsersData.get(user).equals(psw)){
 
                 //se lo sono aggiorno lo stato dell'utente da offline a online e restituisco la nuova hashmap con gli stati aggiornati
-                usersStatus.put(user, "online");
+                usersStatus.putIfAbsent(user, "online");
                 try {
                     ROS.update(user, "Online");
                 }catch (IOException e){
@@ -293,18 +338,6 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     }
 
-//    public boolean checkUserPsw(String user, String psw){
-//        if (registeredUsersData)
-//    }
-
-    /**
-     * @return the list of projects
-     */
-    public List<Project> getProjectList(){
-        return projectList;
-    }
-
-
 
     /**
      *
@@ -316,17 +349,24 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
      * @return 405 if the user does not exist
      */
     public int searchRegisteredMember(String projectName, String user){
-
         if (registeredUsersData.containsKey(user)){
             for (Project project : projectList){
-                System.out.println(projectName);
-                if (project.getProjectName().trim().equals(projectName)){
-                    try {
-                        project.addMember(user);
-                    }catch (IllegalArgumentException e){
-                        return 400; //if the user is already a member of this project
+                synchronized (project){
+                    System.out.println(projectName);
+                    if (project.getProjectName().trim().equals(projectName)){
+                        try {
+                            //add the member tho the project and advise that member that has been added to the project through a callback
+                            project.addMember(user);
+                            try {
+                                ROS.updateProject(user, projectName, project.getMIPAddress());
+                            }catch (RemoteException e){
+                                e.printStackTrace();
+                            }
+                        }catch (IllegalArgumentException e){
+                            return 400; //if the user is already a member of this project
+                        }
+                        return 200; //if the user has been added to this project
                     }
-                    return 200; //if the user has been added to this project
                 }
             }
             return 404; //if the project does not exist
@@ -335,15 +375,18 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     }
 
 
+    /**
+     *
+     * @param nameProject
+     * @return the project whit nameProject as name or null if the project does not exist
+     */
     public Project checkProject(String nameProject){
-
-        //get the project list and verify if the project exist
-        projectList = mainServer.getProjectList();
-
         //verify if the project exist
-        for (Project project : projectList){
-            if (project.getProjectName().equals(nameProject)){
-                return project;
+        synchronized (projectList){
+            for (Project project : projectList){
+                if (project.getProjectName().equals(nameProject)){
+                    return project;
+                }
             }
         }
         return null;
@@ -361,11 +404,50 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         channelBinding.putIfAbsent(client, user);
     }
 
-    public void addProject(Project project){
-        projectList.add(project);
+    public boolean addProject(Project project, String user){
+        //add a multicastIP to the project
+        synchronized (projectList){
+            for (Project projectTmp : projectList){
+                if (projectTmp.getProjectName().equals(project.getProjectName())){
+                    return false;
+                }
+            }
+
+            project.setMIPAddress(mipManager.createRandomIP());
+
+            //update the Arraylist with association project-MIPAddress
+            synchronized (projectMemberBinding){
+                if (projectMemberBinding.containsKey(user)){
+                    projectMemberBinding.get(user).add(project);
+                } else {
+                    ArrayList<Project> tmpArrayList = new ArrayList<>();
+                    tmpArrayList.add(project);
+                    projectMemberBinding.put(user, tmpArrayList);
+                }
+            }
+            projectList.add(project);
+
+            //update the user
+            try {
+                ROS.updateProject(user, project.getProjectName(), project.getMIPAddress());
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+            return true;
+        }
     }
 
-
+    public HashMap<String, String> sendIPBinding(String user){
+        HashMap<String, String> IPBinding = new HashMap<>();
+        //recuperare l'arraylist dei progetti associati all'utente
+        //per ogni progetto recuperare l'ipmulticast ed inserirlo nella hashmpa insieme al nome del progetto
+        synchronized (projectMemberBinding){
+            for (Project project : projectMemberBinding.get(user)){
+                IPBinding.put(project.getProjectName(), project.getMIPAddress());
+            }
+        }
+        return IPBinding;
+    }
 
     //send a serialized object
     public static void sendSerializedObject(SocketChannel clientChannel, Object obj){
@@ -391,39 +473,57 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     public boolean addCard(String cardName, String nameProject, String description){
         for (Project project : projectList){
-            if (project.getProjectName().equals(nameProject)){
-                //if the card does not already exist
-                try {
-                    project.addCard(cardName, description);
-                    return true;
-                }catch (IllegalArgumentException e){
-                    return false;
+            synchronized (project){
+                if (project.getProjectName().equals(nameProject)){
+                    //if the card does not already exist
+                    try {
+                        project.addCard(cardName, description);
+                        return true;
+                    }catch (IllegalArgumentException e){
+                        return false;
+                    }
                 }
             }
         }
         return false;
     }
 
-    public String moveCard(String nameProject, String cardName,  String srcList, String destList){
-        for (Project project : projectList){
-            if (project.getProjectName().equals(nameProject)){
-                //if the card does not already exist
-                try {
-                    if (project.moveCard(cardName, srcList, destList)){
-                        return "OK";
+    public String moveCard(String nameProject, String cardName,  String srcList, String destList) {
+        for (Project project : projectList) {
+            synchronized (project) {
+                if (project.getProjectName().equals(nameProject)) {
+                    //if the card does not already exist
+                    try {
+                        if (project.moveCard(cardName, srcList, destList)) {
+                            return "OK";
+                        }
+                    } catch (IllegalArgumentException e) {
+                        return "Wrong destination";
                     }
-                }catch (IllegalArgumentException e){
-                    return "Wrong destination";
                 }
             }
         }
         return "Card not found";
     }
 
-    //synchronized method for delete a project
-    public void deleteProject(){
-        synchronized (projectList){
-            //TODO
+    public void sendResult(String result, SocketChannel clientChannel){
+        try {
+
+            //alloco spazio sul buffer per la stringa
+
+            Charset charset = Charset.defaultCharset();
+            CharBuffer Cbcs = CharBuffer.wrap(result);
+            ByteBuffer byteCommandToSend = charset.encode(Cbcs);
+
+            byteCommandToSend.compact();
+            byteCommandToSend.flip();
+
+            while (byteCommandToSend.hasRemaining()){
+                clientChannel.write(byteCommandToSend);
+            }
+
+        } catch (IOException e){
+            System.err.println("Errore durante la scrittura nel canale");
         }
     }
 }

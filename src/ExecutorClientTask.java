@@ -3,13 +3,12 @@
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
 
 public class ExecutorClientTask implements Runnable{
 
@@ -34,15 +33,18 @@ public class ExecutorClientTask implements Runnable{
                 //get the new project name
                 nameProject = command[1].trim();
 
-                //check if the new project name already exist
-                if ((project = mainServer.checkProject(nameProject))!=null){
-                    sendResult("Error project already exist");
-                    break;
-                }
                 project = new Project(nameProject);
-                project.addMember(user); //add the member that has request the creation of this project
-                mainServer.addProject(project);
-                sendResult("OK");
+                project.addMember(user);
+
+                //check if the new project name already exist
+                if (mainServer.addProject(project, user)){
+                    sendResult("OK");
+                    HashMap<String, String> IPBinding = mainServer.sendIPBinding(user);
+                    sendSerializedObject(IPBinding);
+                    break;
+                } else {
+                    sendResult("Project already exist");
+                }
                 break;
 
             case "addMember":
@@ -184,7 +186,6 @@ public class ExecutorClientTask implements Runnable{
                 }else {
                     sendResult("Project does not exist");
                 }
-
                 break;
         }
     }

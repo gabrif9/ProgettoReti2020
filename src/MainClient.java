@@ -3,9 +3,7 @@ import RMICallbacksInterface.RMICallbackServer;
 import registrationInterfaceRMI.RegistrationInterface;
 
 import java.io.*;
-import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SocketChannel;
@@ -20,10 +18,28 @@ import java.rmi.server.RemoteObject;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class MainClient extends RemoteObject implements RMICallbackClient {
 
 
+
+    //threadpool for manage the chat
+    private ThreadPoolExecutor executorChat;
+
+    //hashmap for save the Future of a task, that permit to stop a single thread in the threadpool
+    private HashMap<String, Future<?>> threadBinding;
+    //HashMap with association <nameProject, MIPAddress>
+    private HashMap<String, String> IPBinding;
+    //HashMap with association <nameProject, messageHistory>
+    private HashMap<String, ArrayList<String>> messageHistoryProjects;
+    //HashMap with association <nameProject, lastReadMessage> for remember the last message read oh the project chat's
+    private HashMap<String, Integer> lastReadMessageCounters;
+
+
+    private String user;
     private String nameProject;
     private int loggedIn = 0;
     private RMICallbackClient stub = null;
@@ -33,10 +49,13 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
     public static int DEFAULT_PORT = 5000;
     public static int DEFAULT_PORT_CALLBACK = 3000;
     SocketChannel clientChannel;
+    RMICallbackServer server;
 
     //CONSTRUCTOR
     public MainClient() {
         listUsers = new ArrayList<>();
+        executorChat = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+        threadBinding = new HashMap<>();
     }
 
     /**
@@ -75,8 +94,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
     public static void main (String[]args){
 
-        MainClient client = new MainClient();
-        client.beforeLoginCommand();
+        MainClient mainClient = new MainClient();
+        mainClient.beforeLoginCommand();
 
     }
 
@@ -103,6 +122,19 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                     listOnlineUsers = login();
                 }
                 System.out.println(loggedIn);
+
+                //receive the Hashmap with the association Project-MIPAddress
+                //TODO trovare una soluzione se non c'e' nulla da ricevere
+                try (ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())){
+                    if (objectInputStream.available()!=0){
+                        IPBinding = (HashMap<String, String>) objectInputStream.readObject();
+                    }
+                } catch (IOException e){
+                    e.printStackTrace();
+                } catch (ClassNotFoundException e){
+                    e.printStackTrace();
+                }
+                lastReadMessageCounters = new HashMap<>();
                 registerForCallback();
                 afterLoginCommand();
                 break;
@@ -166,9 +198,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 commandToSend = "listProjects";
                 sendCommand(commandToSend);
 
-                try {
-
-                    ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream());
+                try(ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())) {
                     listUserProject = (ArrayList<String>) objectInputStream.readObject();
                     System.out.println(listUserProject);
                 }catch (IOException e){
@@ -193,13 +223,22 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
 
                 if (!responseString.equals("OK")){
-                    System.err.println("Progetto gia' esistente");
-                    afterLoginCommand();
+                    System.err.println("Progetto aggiunto correttamente");
+
+                    //receive the MulticastIP of this project and bind it
+                    try (ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())){
+                        IPBinding = (HashMap<String, String>) objectInputStream.readObject();
+                        ProjectChatSniffer tmp = new ProjectChatSniffer(IPBinding.get(nameProject), nameProject, this);
+                        threadBinding.putIfAbsent(nameProject, executorChat.submit(tmp));
+
+                    }catch (ClassNotFoundException | IOException e){
+                        e.printStackTrace();
+                    }
+                    operationTerminated();
                     break;
                 } else {
-                    System.out.println("Progetto aggiunto correttamente");
+                    System.out.println("Progetto gia' esistente");
                     operationTerminated();
-                    afterLoginCommand();
                 }
                 break;
 
@@ -247,8 +286,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 String result = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
                 System.out.println(result);
                 if (result.equals("OK")){
-                    try {
-                        ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream());
+                    try(ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())) {
                         members = (ArrayList<String>) objectInputStream.readObject();
                         System.out.println(members);
                         operationTerminated();
@@ -276,8 +314,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 responseString = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
                 ArrayList<String> cards;
                 if (responseString.equals("OK")){
-                    try {
-                        ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream());
+                    try (ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())){
                         cards = (ArrayList<String>) objectInputStream.readObject();
                         System.out.println(cards);
                         operationTerminated();
@@ -309,8 +346,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 Card cardReceived = null;
 
                 if (responseString.equals("OK")){
-                    try {
-                        ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream());
+                    try (ObjectInputStream objectInputStream = new ObjectInputStream(clientChannel.socket().getInputStream())){
+
                         cardReceived = (Card) objectInputStream.readObject();
                         System.out.println("Nome card: " + cardReceived.getName());
                         System.out.println("Descrizione: " + cardReceived.getDescription());
@@ -419,11 +456,74 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 operationTerminated();
 
             case 13:
-                //readChat
-            case 14:
                 //sendChatMsg
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+                System.out.println("Inserisci il messaggio");
+                String message = user + " ha detto :" + scanner.nextLine();
+
+                try {
+                    //get the multicast ip from the hashmap
+                    InetAddress multicastAddress = InetAddress.getByName(IPBinding.get(nameProject));
+
+                    //create datagram socket
+                    DatagramSocket datagramSocket = new DatagramSocket(4656);
+
+                    //create the message and put the message inside the datagramPacket
+
+                    byte [] messageData;
+                    messageData = message.getBytes();
+                    DatagramPacket messageDP = new DatagramPacket(messageData, messageData.length, multicastAddress, 4656);
+                    datagramSocket.send(messageDP);
+                    datagramSocket.close();
+                    System.out.println("Messaggio inviato");
+                    operationTerminated();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+
+            case 14:
+                //readChat
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+
+                int lastReadMessage = lastReadMessageCounters.get(nameProject);
+
+                synchronized (messageHistoryProjects){
+                    if (lastReadMessage + 1 != messageHistoryProjects.get(nameProject).size()){
+                        for (int i = lastReadMessage + 1; i <= messageHistoryProjects.get(nameProject).size(); i++){
+                            System.out.println("> " + messageHistoryProjects.get(nameProject).get(i));
+                        }
+                        lastReadMessage = messageHistoryProjects.get(nameProject).size() - 1;
+                    } else System.out.println("Non e' presente nessun nuovo messaggio");
+                }
+                lastReadMessageCounters.put(nameProject, lastReadMessage);
+                operationTerminated();
+
+
+
+
+
             case 15:
                 //cancelProject
+                System.out.println("Inserisci il nome del progetto");
+                nameProject = scanner.next();
+
+                commandToSend = "cancelProject " + nameProject;
+                sendCommand(commandToSend);
+
+                result = StandardCharsets.UTF_8.decode(receiveResponse()).toString();
+                if (result.equals("Project deleted")){
+                    //TODO avvertire gli altri client che un progetto e' stato eliminato quindi terminare il thread che si occupava della chat
+
+                }
+
+                System.out.println(result);
+                operationTerminated();
+                break;
+
+
             default:
                 System.err.println("command not found");
                 afterLoginCommand();
@@ -462,7 +562,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         try {
             Registry registry = LocateRegistry.getRegistry(DEFAULT_PORT_CALLBACK);
             String name = "ServerCallback";
-            RMICallbackServer server = (RMICallbackServer) registry.lookup(name);
+            server = (RMICallbackServer) registry.lookup(name);
 
             ROC = this;
             //se lo stub e' null il client non e' mai stato avviato, altrimenti significa che lo stub e' gia' registrato sul registry
@@ -470,6 +570,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 stub = (RMICallbackClient) UnicastRemoteObject.exportObject(ROC, 0);
             }
             server.registerForCallback(stub);
+            server.registerForcallbackUpdateProjects(user, stub);
             System.out.println("registered for callback");
 
         }catch (RemoteException e){
@@ -486,6 +587,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             RMICallbackServer server = (RMICallbackServer) registry.lookup(name);
 
             server.unregisterForCallback(stub);
+            server.unRegisterForcallbackupdateProjects(user, stub);
         }catch (RemoteException e){
             e.printStackTrace();
         }catch (NotBoundException e){
@@ -493,9 +595,24 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         }
     }
 
+    public void addedToNewProjectevent(String nameProject, String MIPAddress) throws RemoteException{
+        IPBinding.putIfAbsent(nameProject, MIPAddress);
+
+        //Start a thread sniffer
+        ProjectChatSniffer tmp = new ProjectChatSniffer(IPBinding.get(nameProject), nameProject, this);
+        threadBinding.putIfAbsent(nameProject, executorChat.submit(tmp));
+
+    }
+
+    public void projectRemoved(String nameProject) throws RemoteException{
+        IPBinding.remove(nameProject);
+        threadBinding.get(nameProject).cancel(true);
+        lastReadMessageCounters.remove(nameProject);
+    }
+
 
     public ConcurrentHashMap<String, String> login(){
-        String user, passwd;
+        String passwd;
         Scanner in = new Scanner(System.in);
         System.out.println("Insert your username");
         user = in.nextLine();
@@ -506,11 +623,10 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             clientChannel = connectToServer();
         }
 
-        String commandToSend = "login" + " " + user + " " + passwd;
+        String commandToSend = "login " + user + " " + passwd;
         sendCommand(commandToSend);
 
 
-        //TODO trovare un modo per non mandare le password in chiaro
 
         //controllo il risultato della login
         try {
@@ -544,6 +660,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         }
         return null;
     }
+
 
     public void register () {
 
@@ -597,7 +714,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             return false;
         }
 
-        return true; //non necessario
+        return true;
     }
 
     public SocketChannel connectToServer(){
@@ -650,6 +767,11 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
             e.printStackTrace();
         }
         return response;
+    }
+
+    //methods for manage chat message
+    public void addMessage(String project, String message){
+        messageHistoryProjects.get(project).add(message);
     }
 
 

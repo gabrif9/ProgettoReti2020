@@ -1,8 +1,10 @@
 package RMICallbacksInterface;
 
+import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.server.RemoteObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,10 +13,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RMICallbackServerImpl extends RemoteObject implements RMICallbackServer {
 
     private List<RMICallbackClient> clients;
+    private HashMap<String, RMICallbackClient> clientForUpdateProjectRegistered;
 
     public RMICallbackServerImpl() throws RemoteException{
         super();
         clients = new ArrayList<RMICallbackClient>();
+        clientForUpdateProjectRegistered = new HashMap<>();
     }
 
     @Override
@@ -39,5 +43,23 @@ public class RMICallbackServerImpl extends RemoteObject implements RMICallbackSe
             RMICallbackClient rmiCallbackClient = (RMICallbackClient) i.next();
             rmiCallbackClient.notifyEventFromServer(user, status);
         }
+    }
+
+    public synchronized void registerForcallbackUpdateProjects(String user, RMICallbackClient clientInterface){
+        clientForUpdateProjectRegistered.putIfAbsent(user, clientInterface);
+    }
+
+    public synchronized void unRegisterForcallbackupdateProjects(String user, RMICallbackClient clientInterface){
+        clientForUpdateProjectRegistered.remove(user);
+    }
+
+    public synchronized void updateProject(String user, String project, String MIPAddress) throws RemoteException{doCallbacksProjectAdded(user, project, MIPAddress);}
+
+    public synchronized void doCallbacksProjectAdded(String user, String nameProject, String MIPAddress) throws RemoteException{
+        clientForUpdateProjectRegistered.get(user).addedToNewProjectevent(nameProject, MIPAddress);
+    }
+
+    public synchronized void doCallbacksProjectremoved(String user, String nameProject) throws RemoteException{
+        clientForUpdateProjectRegistered.get(user).projectRemoved(nameProject);
     }
 }
