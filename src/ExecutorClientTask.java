@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -13,17 +14,21 @@ import java.util.HashMap;
 public class ExecutorClientTask implements Runnable{
 
     private String nameProject;
-    private MainServer mainServer;
-    private String user;
-    private SocketChannel clientChannel;
-    private String[] command;
+    private final MainServer mainServer;
+    private final String user;
+    private final SocketChannel clientChannel;
+    private final String[] command;
     private Project project = null;
+    private final Result result;
+    private final SelectionKey key;
 
-    public ExecutorClientTask(MainServer mainServer, String user, String[] command, SocketChannel clientChannel){
+    public ExecutorClientTask(MainServer mainServer, String user, String[] command, SocketChannel clientChannel, Result result, SelectionKey key){
         this.clientChannel = clientChannel;
         this.user = user;
         this.command = command;
         this.mainServer = mainServer;
+        this.result = result;
+        this.key = key;
     }
 
     @Override
@@ -38,13 +43,14 @@ public class ExecutorClientTask implements Runnable{
 
                 //check if the new project name already exist
                 if (mainServer.addProject(project, user)){
-                    sendResult("OK");
+                    result.setResult("OK");
                     HashMap<String, String> IPBinding = mainServer.sendIPBinding(user);
-                    sendSerializedObject(IPBinding);
-                    break;
+                    result.addSerializedObject("IPBinding", serializeObject(IPBinding));
                 } else {
-                    sendResult("Project already exist");
+                    result.setResult("Project already exist");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "addMember":
@@ -52,32 +58,38 @@ public class ExecutorClientTask implements Runnable{
                 //get the project name
                 nameProject = command[1].trim();
                 //check if the project exist
-                int result = mainServer.searchRegisteredMember(nameProject, command[2]);
-                if (result == 200){
+                int resultOperation = mainServer.searchRegisteredMember(nameProject, command[2]);
+                if (resultOperation == 200){
                     //controllare se newMember e' registrato e non e' membro del progetto
-                    sendResult("OK");
-                } else if (result == 400){
-                    sendResult("User already member");
-                } else if (result == 404){
-                    sendResult("project does not exist");
-                } else if (result == 405){
-                    sendResult("User does not exist");
+                    result.setResult("OK");
+                } else if (resultOperation == 400){
+                    result.setResult("User already member");
+                } else if (resultOperation == 404){
+                    result.setResult("project does not exist");
+                } else if (resultOperation == 405){
+                    result.setResult("User does not exist");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "showMember":
                 nameProject = command[1].trim();
 
                 //check if the project exist
-                if ((project = mainServer.checkProject(nameProject))!= null){
-                    if (project.searchMember(user)){
-                        ArrayList<String> members = project.getMembers();
-                        sendResult("OK");
-                        sendSerializedObject(members);
-                    } else {
-                        sendResult("This user does not belong to the project");
+                if ((project = mainServer.checkProject(nameProject))!= null) {
+                    synchronized (project) {
+                        if (project.searchMember(user)) {
+                            ArrayList<String> members = project.getMembers();
+                            result.setResult("OK");
+                            result.addSerializedObject("members", serializeObject(members));
+                        } else {
+                            result.setResult("This user does not belong to the project");
+                        }
                     }
-                } else sendResult("Project not found");
+                } else result.setResult("Project not found");
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "showCards":
@@ -85,14 +97,19 @@ public class ExecutorClientTask implements Runnable{
 
                 //check if the project exist
                 if ((project = mainServer.checkProject(nameProject))!= null){
-                    if (project.searchMember(user)){
-                        ArrayList<String> cardsList = project.getCards();
-                        sendResult("OK");
-                        sendSerializedObject(cardsList);
-                    } else {
-                        sendResult("This user does not belong to this project");
+                    synchronized (project){
+                        if (project.searchMember(user)){
+                            ArrayList<String> cardsList = project.getCards();
+                            result.setResult("OK");
+                            sendSerializedObject(cardsList);
+                            result.addSerializedObject("cardsList", serializeObject(cardsList));
+                        } else {
+                            result.setResult("This user does not belong to the project");
+                        }
                     }
-                } else sendResult("Project does not exist");
+                } else result.setResult("Project not found");
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "showCard":
@@ -105,17 +122,19 @@ public class ExecutorClientTask implements Runnable{
                 if ((project = mainServer.checkProject(nameProject))!= null){
                     if (project.searchMember(user)){
                         if ((card = project.searchCard(cardName))!=null){
-                            sendResult("OK");
-                            sendSerializedObject(card);
+                            result.setResult("OK");
+                            result.addSerializedObject("card", serializeObject(card));
                         } else {
-                            sendResult("Card not found");
+                            result.setResult("Card not found");
                         }
                     } else {
-                        sendResult("This user does not belong to this project");
+                        result.setResult("This user does not belong to the project");
                     }
                 } else {
-                    sendResult("Project does not exist");
+                    result.setResult("Project not found");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "addCard":
@@ -131,18 +150,18 @@ public class ExecutorClientTask implements Runnable{
                 Card card2 = new Card(cardName2, cardDescription);
 
                 //check if the project exist
-                if ((project = mainServer.checkProject(nameProject))!= null){
-                    if (project.searchMember(user)){
-                        boolean resultOperation = mainServer.addCard(cardName2, nameProject, cardDescription);
-                        if (resultOperation){
-                            sendResult("OK");
-                        } else sendResult("Card already exist");
-                    } else {
-                        sendResult("This user does not belong to this project");
-                    }
-                } else {
-                    sendResult("Project does not exist");
+                int resultOperationInt = mainServer.addCard(cardName2, nameProject, cardDescription, user);
+                if (resultOperationInt == 200){
+                    result.setResult("OK");
+                } else if (resultOperationInt == 400){
+                    result.setResult("Card already exist");
+                } else if (resultOperationInt == 404) {
+                    result.setResult("This user does not belong to this project");
+                } else if (resultOperationInt == 408) {
+                    result.setResult("Project does not exist");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "moveCard":
@@ -151,19 +170,28 @@ public class ExecutorClientTask implements Runnable{
                 String cardName3 = command[2];
                 String srcList = command[3];
                 String destList = command[4];
-                String resultMoveOperation;
+                Boolean resultMoveOperation;
 
                 //check if the project exist and user belong to the project
                 if ((project = mainServer.checkProject(nameProject))!= null) {
-                    if (project.searchMember(user)) {
-                        resultMoveOperation = mainServer.moveCard(nameProject, cardName3, srcList, destList);
-                        sendResult(resultMoveOperation);
-                    } else {
-                        sendResult("This user does not belong to this project");
+                    synchronized (project){
+                        if (project.searchMember(user)) {
+                            resultMoveOperation = project.moveCard(cardName3, srcList, destList);
+                            if (resultMoveOperation){
+                                result.setResult("OK");
+                            } else {
+                                result.setResult("Wrong list");
+                            }
+
+                        } else {
+                            result.setResult("This user does not belong to this project");
+                        }
                     }
                 } else {
-                    sendResult("Project does not exist");
+                    result.setResult("Project does not exist");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
 
             case "getCardHistory":
@@ -172,25 +200,29 @@ public class ExecutorClientTask implements Runnable{
 
                 //check if the project exist and user belong to the project
                 if ((project = mainServer.checkProject(nameProject))!= null) {
-                    if (project.searchMember(user)) {
-                        try {
-                            System.out.println("nome carta = " + cardName4);
-                            Card cardTmp = project.getCard(cardName4);
-                            System.out.println("Sono dentro il blocco try di getCardHistory");
-                            sendResult("OK");
-                            sendSerializedObject(cardTmp.getCardHistory());
-                        } catch (IllegalArgumentException e){
-                            sendResult("Card not found");
-                        }
-                    } else sendResult("This user does not belong to this project");
+                    synchronized (project) {
+                        if (project.searchMember(user)) {
+                            try {
+                                System.out.println("nome carta = " + cardName4);
+                                Card cardTmp = project.getCard(cardName4);
+                                System.out.println("Sono dentro il blocco try di getCardHistory");
+                                result.setResult("OK");
+                                result.addSerializedObject("cardHistory", serializeObject(cardTmp.getCardHistory()));
+                            } catch (IllegalArgumentException e) {
+                                result.setResult("Card not found");
+                            }
+                        } else result.setResult("This user does not belong to this project");
+                    }
                 }else {
-                    sendResult("Project does not exist");
+                    result.setResult("Project does not exist");
                 }
+                key.attach(result);
+                key.interestOps(SelectionKey.OP_WRITE);
                 break;
         }
     }
 
-
+    /*
     public void sendResult(String result){
         try {
 
@@ -210,7 +242,7 @@ public class ExecutorClientTask implements Runnable{
         } catch (IOException e){
             System.err.println("Errore durante la scrittura nel canale");
         }
-    }
+    }*/
 
     //send a serialized object
     public void sendSerializedObject(Object obj){
@@ -233,5 +265,19 @@ public class ExecutorClientTask implements Runnable{
         }catch (IOException e){
             e.printStackTrace();
         }
+    }
+
+    public byte[] serializeObject(Object obj){
+        try {
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
+            objectOutputStream.writeObject(obj);
+
+            return byteArrayOutputStream.toByteArray();
+
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+        return null;
     }
 }

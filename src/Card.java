@@ -2,6 +2,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 
 public class Card implements Serializable {
+    private static final long serialVersionUID = -6914309705953066728L;
     private String name;
     private String description;
     private String cardPosition;

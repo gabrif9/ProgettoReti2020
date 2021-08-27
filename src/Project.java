@@ -1,3 +1,4 @@
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.net.UnknownHostException;
@@ -5,8 +6,9 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class Project {
+public class Project implements Serializable {
 
+    private static final long serialVersionUID = 8166959604171627292L;
     //Multicast IP chat
     private String MIPAddress = null;
     private ArrayList<String> messageHistory;
