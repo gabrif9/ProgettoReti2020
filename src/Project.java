@@ -1,3 +1,7 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
@@ -175,6 +179,20 @@ public class Project implements Serializable {
             return true;
         } else {
             return false;
+        }
+    }
+
+    public void backupCard(ObjectMapper mapper, String projectDir){
+        File cardFile;
+        for (Card card : cards){
+            cardFile = new File(projectDir + "/" + card.getName() + ".json");
+            try {
+                //check if the file exist, if not, create the file
+                cardFile.createNewFile();
+                mapper.writeValue(cardFile, card);
+            }catch (IOException e){
+                e.printStackTrace();
+            }
         }
     }
 

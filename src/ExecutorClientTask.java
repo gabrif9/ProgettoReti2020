@@ -1,5 +1,5 @@
 //questa classe si occupera' di gestire i comandi dei vari client
-
+/*
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -16,19 +16,15 @@ public class ExecutorClientTask implements Runnable{
     private String nameProject;
     private final MainServer mainServer;
     private final String user;
-    private final SocketChannel clientChannel;
     private final String[] command;
     private Project project = null;
     private final Result result;
-    private final SelectionKey key;
 
-    public ExecutorClientTask(MainServer mainServer, String user, String[] command, SocketChannel clientChannel, Result result, SelectionKey key){
-        this.clientChannel = clientChannel;
+    public ExecutorClientTask(MainServer mainServer, String user, String[] command, Result result){
         this.user = user;
         this.command = command;
         this.mainServer = mainServer;
         this.result = result;
-        this.key = key;
     }
 
     @Override
@@ -44,13 +40,12 @@ public class ExecutorClientTask implements Runnable{
                 //check if the new project name already exist
                 if (mainServer.addProject(project, user)){
                     result.setResult("OK");
-                    HashMap<String, String> IPBinding = mainServer.sendIPBinding(user);
+                    HashMap<String, String> IPBinding = mainServer.getIPBinding(user);
                     result.addSerializedObject("IPBinding", serializeObject(IPBinding));
                 } else {
                     result.setResult("Project already exist");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "addMember":
@@ -69,8 +64,7 @@ public class ExecutorClientTask implements Runnable{
                 } else if (resultOperation == 405){
                     result.setResult("User does not exist");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "showMember":
@@ -84,12 +78,11 @@ public class ExecutorClientTask implements Runnable{
                             result.setResult("OK");
                             result.addSerializedObject("members", serializeObject(members));
                         } else {
-                            result.setResult("This user does not belong to the project");
+                            result.setResult("This user does not belong to this project");
                         }
                     }
                 } else result.setResult("Project not found");
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "showCards":
@@ -101,15 +94,13 @@ public class ExecutorClientTask implements Runnable{
                         if (project.searchMember(user)){
                             ArrayList<String> cardsList = project.getCards();
                             result.setResult("OK");
-                            sendSerializedObject(cardsList);
                             result.addSerializedObject("cardsList", serializeObject(cardsList));
                         } else {
                             result.setResult("This user does not belong to the project");
                         }
                     }
                 } else result.setResult("Project not found");
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "showCard":
@@ -133,8 +124,7 @@ public class ExecutorClientTask implements Runnable{
                 } else {
                     result.setResult("Project not found");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "addCard":
@@ -158,10 +148,9 @@ public class ExecutorClientTask implements Runnable{
                 } else if (resultOperationInt == 404) {
                     result.setResult("This user does not belong to this project");
                 } else if (resultOperationInt == 408) {
-                    result.setResult("Project does not exist");
+                    result.setResult("Project not found");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "moveCard":
@@ -188,10 +177,9 @@ public class ExecutorClientTask implements Runnable{
                         }
                     }
                 } else {
-                    result.setResult("Project does not exist");
+                    result.setResult("Project not found");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
 
             case "getCardHistory":
@@ -214,56 +202,10 @@ public class ExecutorClientTask implements Runnable{
                         } else result.setResult("This user does not belong to this project");
                     }
                 }else {
-                    result.setResult("Project does not exist");
+                    result.setResult("Project not found");
                 }
-                key.attach(result);
-                key.interestOps(SelectionKey.OP_WRITE);
+                mainServer.setAttachmentOnKey(user, result);
                 break;
-        }
-    }
-
-    /*
-    public void sendResult(String result){
-        try {
-
-            //alloco spazio sul buffer per la stringa
-
-            Charset charset = Charset.defaultCharset();
-            CharBuffer Cbcs = CharBuffer.wrap(result);
-            ByteBuffer byteCommandToSend = charset.encode(Cbcs);
-
-            byteCommandToSend.compact();
-            byteCommandToSend.flip();
-
-            while (byteCommandToSend.hasRemaining()){
-                clientChannel.write(byteCommandToSend);
-            }
-
-        } catch (IOException e){
-            System.err.println("Errore durante la scrittura nel canale");
-        }
-    }*/
-
-    //send a serialized object
-    public void sendSerializedObject(Object obj){
-        try {
-            //serialize the object
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
-            objectOutputStream.writeObject(obj);
-            objectOutputStream.flush();
-            byte[] bytesObjectSerialized = byteArrayOutputStream.toByteArray();
-
-
-            //send the obj serialized
-            ByteBuffer byteBuffer = ByteBuffer.allocate(bytesObjectSerialized.length);
-            byteBuffer.put(bytesObjectSerialized);
-            byteBuffer.flip();
-            while (byteBuffer.hasRemaining()){
-                clientChannel.write(byteBuffer);
-            }
-        }catch (IOException e){
-            e.printStackTrace();
         }
     }
 
@@ -280,4 +222,4 @@ public class ExecutorClientTask implements Runnable{
         }
         return null;
     }
-}
+}*/

@@ -1,13 +1,12 @@
 import java.io.Serializable;
 import java.util.HashMap;
-import java.util.List;
 
 public class Result implements Serializable {
 
-    private int resultCode;
-    private String result;
+    private int resultCode; //String with the int result code
+    private String result; //String with the outcome of the operation or the reason for the failure
 
-    private HashMap<String, byte[]> serializedObjectStructure;
+    private HashMap<String, byte[]> serializedObjectStructure; //Serialized object result of the operation
 
     public void addSerializedObject(String objectSerialized, byte[] byteSerializedObject){
         serializedObjectStructure.put(objectSerialized, byteSerializedObject);

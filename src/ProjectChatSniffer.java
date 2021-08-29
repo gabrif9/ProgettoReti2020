@@ -1,7 +1,5 @@
 import java.io.IOException;
 import java.net.*;
-import java.nio.channels.DatagramChannel;
-import java.nio.channels.Selector;
 
 public class ProjectChatSniffer implements Runnable{
 
@@ -24,7 +22,7 @@ public class ProjectChatSniffer implements Runnable{
         try {
             inetAddress = InetAddress.getByName(MIPAddress);
             multicastSocket = new MulticastSocket();
-            multicastSocket.setSoTimeout(5000);
+            multicastSocket.setSoTimeout(2000);
             //join in the multicastGroup
             multicastSocket.joinGroup(inetAddress);
 
@@ -36,18 +34,16 @@ public class ProjectChatSniffer implements Runnable{
                 //receive the packet
                 try {
                     multicastSocket.receive(messageDP);
-                }catch (SocketException e){
+
+                    //add the new message on the chatHistory of this project
+                    String message = new String(messageDP.getData());
+                    mainClient.addMessage(nameProject, message);
+                }catch (SocketTimeoutException e){
                     if (Thread.currentThread().isInterrupted()){
                         multicastSocket.leaveGroup(inetAddress);
                         multicastSocket.close();
                     }
                 }
-
-
-                //add the new message on the chatHistory of this project
-                String message = new String(messageDP.getData());
-                mainClient.addMessage(nameProject, message);
-
             }
 
         } catch (IOException e) {
