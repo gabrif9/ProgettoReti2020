@@ -1,10 +1,17 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Random;
 
-public class MIPManager {
+public class MIPManager implements Serializable {
 
+    private static final long serialVersionUID = 5942170392116691915L;
     private ArrayList<String> MIPAddress; //IP  address already assigned
 
 
@@ -40,7 +47,36 @@ public class MIPManager {
         MIPAddress.remove(IPToRemove);
     }
 
+    public ArrayList<String> getMIPAddress() {
+        return MIPAddress;
+    }
 
+    public void setMIPAddress(ArrayList<String> MIPAddress) {
+        this.MIPAddress = MIPAddress;
+    }
 
+    public synchronized void setBackup(){
+        ObjectMapper mapper = new ObjectMapper();
+        File MIPAddressFile = new File("./BackupDir/MIPAddress.json");
+        try {
+            if (!MIPAddressFile.exists()){
+                MIPAddressFile.createNewFile();
+            }
+            mapper.writeValue(MIPAddressFile, MIPAddress);
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
 
+    public synchronized void restoreMipAddress(){
+        ObjectMapper mapper = new ObjectMapper();
+        File MIPAddressFile = new File("./BackupDir/MIPAddress.json");
+        try {
+            if (MIPAddressFile.exists()){
+                MIPAddress = new ArrayList<>(mapper.readValue(MIPAddressFile, MIPAddress.getClass()));
+            }
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
 }

@@ -1,7 +1,9 @@
 
 import RMICallbacksInterface.RMICallbackServer;
 import RMICallbacksInterface.RMICallbackServerImpl;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import registrationInterfaceRMI.RegistrationInterface;
 
 import java.io.ByteArrayOutputStream;
@@ -25,15 +27,14 @@ import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
+
 
 @SuppressWarnings("all")
 public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
     //backup
-    private File backupDir, projectsFile, listUsersFile;
+    private File backupDir, projectsFile, listUsersFile, MIPAddressFile;
     private final ObjectMapper backupMapper;
 
 
@@ -54,6 +55,11 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     public MainServer(){
         backupDir = new File("./BackupDir");
         backupMapper = new ObjectMapper();
+        backupMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        backupMapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
+        this.listUsersFile = new File(backupDir + "/UsersData.json");
+        this.projectsFile = new File(backupDir + "/ProjectsData.json");
+        this.MIPAddressFile = new File(backupDir + "/MIPAddress.json");
 
         usersStatus = new ConcurrentHashMap<String, String>();
         channelBinding = new HashMap<SocketChannel, String>();
@@ -68,22 +74,21 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             e.printStackTrace();
         }
 
+
         searchAndRestoreBackup();
     }
 
     //serve per ripristinare lo stato precedente del server
     public void searchAndRestoreBackup(){
-        this.listUsersFile = new File(backupDir + "/UsersData.json");
-        this.projectsFile = new File(backupDir + "ProjectsData.json");
-
         try {
             if (backupDir.exists()){
                 if (listUsersFile.exists()){
                     registeredUsersData = new ConcurrentHashMap<String, String>(backupMapper.readValue(listUsersFile, registeredUsersData.getClass()));
                 }
                 if (projectsFile.exists()){
-                    projectList = Collections.synchronizedList(new ArrayList<Project>(Arrays.asList(backupMapper.readValue(projectsFile, Project.class))));
+                    projectList = new ArrayList<Project>(Arrays.asList(backupMapper.readValue(projectsFile, Project[].class)));
                 }
+                mipManager.restoreMipAddress();
             }
         }catch (IOException e){
             e.printStackTrace();
@@ -92,8 +97,9 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     public void setBackup(){
         try {
+            System.out.println("------BACKUP------");
             if (!backupDir.exists()){
-                backupDir.createNewFile();
+                backupDir.mkdir();
             }
             if (!listUsersFile.exists()){
                 listUsersFile.createNewFile();
@@ -107,9 +113,11 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                 backupMapper.writeValue(projectsFile, projectList);
 
                 for (Project project : projectList){
-                    project.backupCard(backupMapper, projectsFile.getPath());
+                    project.backup();
                 }
             }
+            //save the ip already assigned
+            mipManager.setBackup();
         }catch (IOException e) {
             e.printStackTrace();
         }

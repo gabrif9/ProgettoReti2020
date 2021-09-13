@@ -1,21 +1,27 @@
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
-import java.net.InetAddress;
-import java.net.MulticastSocket;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Project implements Serializable {
 
-    private static final long serialVersionUID = 8166959604171627292L;
+
+    private static final long serialVersionUID = -998624166256962694L;
     //Multicast IP chat
     private String MIPAddress = null;
     private ArrayList<String> messageHistory;
+
+
+    private File projectDir;
+    ObjectMapper mapper;
+
 
     //An hashmap foreach card list
     private ConcurrentHashMap <String, Card> toDo;
@@ -29,6 +35,10 @@ public class Project implements Serializable {
     private String projectName;
 
 
+    public Project(){
+        super();
+    }
+
     //Constructor
     public Project(String projectName) {
         this.projectName = projectName;
@@ -40,10 +50,20 @@ public class Project implements Serializable {
         cardsName = new ArrayList<>();
         members = new ArrayList<>();
         messageHistory = new ArrayList<>();
+        projectDir = new File("./BackupDir/" + projectName);
+        mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        //create the directory for this project
+        if (!projectDir.exists()){
+            projectDir.mkdir();
+        }
     }
 
+
+
     //move the card identified by cardName from listaPartenza to listaDestinazione
-    public boolean moveCard(String cardName, String listaPartenza, String listaDestinazione){
+    public synchronized boolean moveCard(String cardName, String listaPartenza, String listaDestinazione){
         switch (listaPartenza.toUpperCase()){
             case "TODO":
                 if (!listaDestinazione.equalsIgnoreCase("inprogress")){
@@ -107,7 +127,7 @@ public class Project implements Serializable {
         }
     }
 
-
+    @JsonIgnore
     public synchronized void addCard(String cardName, String description){
         //check if the card cardName already exist in this project
         if (cardsName.contains(cardName)) throw new IllegalArgumentException("Card already exist");
@@ -120,7 +140,7 @@ public class Project implements Serializable {
         toDo.put(cardName, cTmp);
     }
 
-
+    @JsonIgnore
     //add a member if does not already exist
     public synchronized void addMember(String nickUtente){
         //check if the member nickUtente already exist in this project
@@ -130,7 +150,7 @@ public class Project implements Serializable {
         members.add(nickUtente);
     }
 
-
+    @JsonIgnore
     public synchronized Card getCard(String cardName){
         //check if the card is in the project
         if (!cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not exist");
@@ -143,8 +163,9 @@ public class Project implements Serializable {
         return null;
     }
 
+    @JsonIgnore
     //function that search and replace the modified card on cards list
-    private synchronized void searchAndRemoveCard(String cardName, Card cTmp){
+    private void searchAndRemoveCard(String cardName, Card cTmp){
         for (int i = 0; i < cards.size(); i++) {
             if (cards.get(i).getName().equals(cardName)){
                 cards.remove(i);
@@ -153,7 +174,7 @@ public class Project implements Serializable {
         }
     }
 
-
+    @JsonIgnore
     //search and return the card cardName
     public synchronized Card searchCard(String cardName){
         if (cardName.contains(cardName)){
@@ -166,6 +187,31 @@ public class Project implements Serializable {
         return null;
     }
 
+    public void backup(){
+        File cardFile;
+        if (cards.size()!=0){
+            for (Card card : cards){
+                cardFile = new File(projectDir + "/" + card.getName() + ".json");
+                System.out.println(cardFile.getPath());
+                try {
+                    //check if the file exist, if not, create the file
+                    cardFile.createNewFile();
+                    mapper.writeValue(cardFile, card);
+                }catch (IOException e){
+                    e.printStackTrace();
+                }
+            }
+        }
+
+    }
+
+    public File getProjectDir() {
+        return projectDir;
+    }
+
+    public void setProjectDir(File projectDir) {
+        this.projectDir = projectDir;
+    }
 
     //check if all the card are in the done list
     public boolean checkCard(){
@@ -182,19 +228,7 @@ public class Project implements Serializable {
         }
     }
 
-    public void backupCard(ObjectMapper mapper, String projectDir){
-        File cardFile;
-        for (Card card : cards){
-            cardFile = new File(projectDir + "/" + card.getName() + ".json");
-            try {
-                //check if the file exist, if not, create the file
-                cardFile.createNewFile();
-                mapper.writeValue(cardFile, card);
-            }catch (IOException e){
-                e.printStackTrace();
-            }
-        }
-    }
+
 
     //add a message in the message history
     public void addMessage(String message){
