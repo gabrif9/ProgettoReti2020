@@ -1,9 +1,7 @@
 <component name="libraryTable">
   <library name="jackson-annotations-2.9.7">
     <CLASSES>
-      <root url="jar://F:/chrome downloads/jackson-annotations-2.9.7.jar!/" />
-      <root url="jar://F:/chrome downloads/jackson-core-2.9.7.jar!/" />
-      <root url="jar://F:/chrome downloads/jackson-databind-2.9.7.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../../chrome downloads/gson-2.8.8.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />

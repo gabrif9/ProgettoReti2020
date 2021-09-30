@@ -1,8 +1,7 @@
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -56,24 +55,40 @@ public class MIPManager implements Serializable {
     }
 
     public synchronized void setBackup(){
-        ObjectMapper mapper = new ObjectMapper();
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .create();
+
         File MIPAddressFile = new File("./BackupDir/MIPAddress.json");
         try {
             if (!MIPAddressFile.exists()){
                 MIPAddressFile.createNewFile();
             }
-            mapper.writeValue(MIPAddressFile, MIPAddress);
+
+            try (Writer writer = new FileWriter("./BackupDir/MIPAddress.json");){
+                gson.toJson(MIPAddress, writer);
+            }
+
+
         }catch (IOException e){
             e.printStackTrace();
         }
     }
 
     public synchronized void restoreMipAddress(){
-        ObjectMapper mapper = new ObjectMapper();
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .create();
+
         File MIPAddressFile = new File("./BackupDir/MIPAddress.json");
         try {
             if (MIPAddressFile.exists()){
-                MIPAddress = new ArrayList<>(mapper.readValue(MIPAddressFile, MIPAddress.getClass()));
+                try {
+                    MIPAddress = new ArrayList<String>(gson.fromJson(new FileReader(MIPAddressFile), MIPAddress.getClass()));
+                } catch (NullPointerException e){
+                    MIPAddress = new ArrayList<String>();
+                }
+
             }
         }catch (IOException e){
             e.printStackTrace();

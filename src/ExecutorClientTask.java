@@ -192,7 +192,7 @@ public class ExecutorClientTask implements Runnable{
                         if (project.searchMember(user)) {
                             try {
                                 System.out.println("nome carta = " + cardName4);
-                                Card cardTmp = project.getCard(cardName4);
+                                Card cardTmp = project.getCardToSend(cardName4);
                                 System.out.println("Sono dentro il blocco try di getCardHistory");
                                 result.setResult("OK");
                                 result.addSerializedObject("cardHistory", serializeObject(cardTmp.getCardHistory()));

@@ -1,12 +1,7 @@
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,7 +15,6 @@ public class Project implements Serializable {
 
 
     private File projectDir;
-    ObjectMapper mapper;
 
 
     //An hashmap foreach card list
@@ -39,6 +33,8 @@ public class Project implements Serializable {
         super();
     }
 
+
+
     //Constructor
     public Project(String projectName) {
         this.projectName = projectName;
@@ -51,8 +47,6 @@ public class Project implements Serializable {
         members = new ArrayList<>();
         messageHistory = new ArrayList<>();
         projectDir = new File("./BackupDir/" + projectName);
-        mapper = new ObjectMapper();
-        mapper.enable(SerializationFeature.INDENT_OUTPUT);
 
         //create the directory for this project
         if (!projectDir.exists()){
@@ -127,7 +121,6 @@ public class Project implements Serializable {
         }
     }
 
-    @JsonIgnore
     public synchronized void addCard(String cardName, String description){
         //check if the card cardName already exist in this project
         if (cardsName.contains(cardName)) throw new IllegalArgumentException("Card already exist");
@@ -140,7 +133,6 @@ public class Project implements Serializable {
         toDo.put(cardName, cTmp);
     }
 
-    @JsonIgnore
     //add a member if does not already exist
     public synchronized void addMember(String nickUtente){
         //check if the member nickUtente already exist in this project
@@ -150,8 +142,7 @@ public class Project implements Serializable {
         members.add(nickUtente);
     }
 
-    @JsonIgnore
-    public synchronized Card getCard(String cardName){
+    public synchronized Card getCardToSend(String cardName){
         //check if the card is in the project
         if (!cardsName.contains(cardName)) throw new IllegalArgumentException("the card does not exist");
 
@@ -163,7 +154,6 @@ public class Project implements Serializable {
         return null;
     }
 
-    @JsonIgnore
     //function that search and replace the modified card on cards list
     private void searchAndRemoveCard(String cardName, Card cTmp){
         for (int i = 0; i < cards.size(); i++) {
@@ -174,7 +164,6 @@ public class Project implements Serializable {
         }
     }
 
-    @JsonIgnore
     //search and return the card cardName
     public synchronized Card searchCard(String cardName){
         if (cardName.contains(cardName)){
@@ -189,20 +178,27 @@ public class Project implements Serializable {
 
     public void backup(){
         File cardFile;
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .create();
+
         if (cards.size()!=0){
             for (Card card : cards){
                 cardFile = new File(projectDir + "/" + card.getName() + ".json");
-                System.out.println(cardFile.getPath());
+                //System.out.println(cardFile.getPath());
                 try {
                     //check if the file exist, if not, create the file
                     cardFile.createNewFile();
-                    mapper.writeValue(cardFile, card);
+
+                    try (Writer writer = new FileWriter(projectDir + "/" + card.getName() + ".json")){
+                        gson.toJson(card, writer);
+                    }
+
                 }catch (IOException e){
                     e.printStackTrace();
                 }
             }
         }
-
     }
 
     public File getProjectDir() {
@@ -316,5 +312,9 @@ public class Project implements Serializable {
     public void setMessageHistory(ArrayList<String> messageHistory) {
         this.messageHistory = messageHistory;
     }
+
+    public ArrayList<Card> getCard(){ return cards; }
+
+
 
 }

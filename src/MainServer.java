@@ -1,15 +1,11 @@
 
 import RMICallbacksInterface.RMICallbackServer;
 import RMICallbacksInterface.RMICallbackServerImpl;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import registrationInterfaceRMI.RegistrationInterface;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -35,7 +31,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
     //backup
     private File backupDir, projectsFile, listUsersFile, MIPAddressFile;
-    private final ObjectMapper backupMapper;
+    private Gson gson;
 
 
     private MIPManager mipManager;
@@ -53,10 +49,12 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
     public MainServer(){
+        gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .create();
+
         backupDir = new File("./BackupDir");
-        backupMapper = new ObjectMapper();
-        backupMapper.enable(SerializationFeature.INDENT_OUTPUT);
-        backupMapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
+
         this.listUsersFile = new File(backupDir + "/UsersData.json");
         this.projectsFile = new File(backupDir + "/ProjectsData.json");
         this.MIPAddressFile = new File(backupDir + "/MIPAddress.json");
@@ -78,15 +76,24 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         searchAndRestoreBackup();
     }
 
-    //serve per ripristinare lo stato precedente del server
+    //restore the previous server state
     public void searchAndRestoreBackup(){
         try {
             if (backupDir.exists()){
                 if (listUsersFile.exists()){
-                    registeredUsersData = new ConcurrentHashMap<String, String>(backupMapper.readValue(listUsersFile, registeredUsersData.getClass()));
+                    try {
+                        registeredUsersData = new ConcurrentHashMap<String, String>(gson.fromJson(new FileReader(listUsersFile), registeredUsersData.getClass()));
+                    } catch (NullPointerException e){
+                        registeredUsersData = new ConcurrentHashMap<String, String>();
+                    }
                 }
                 if (projectsFile.exists()){
-                    projectList = new ArrayList<Project>(Arrays.asList(backupMapper.readValue(projectsFile, Project[].class)));
+                    try {
+                        projectList = Collections.synchronizedList(new ArrayList<Project>(Arrays.asList(gson.fromJson(new FileReader(projectsFile), Project[].class))));
+                    }catch (NullPointerException e){
+                        projectList = Collections.synchronizedList(new ArrayList<Project>());
+                    }
+
                 }
                 mipManager.restoreMipAddress();
             }
@@ -104,13 +111,20 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             if (!listUsersFile.exists()){
                 listUsersFile.createNewFile();
             }
-            backupMapper.writeValue(listUsersFile, registeredUsersData);
+            //backupUsersData
+            try (Writer writer = new FileWriter(backupDir + "/UsersData.json");){
+                gson.toJson(registeredUsersData, writer);
+            }
 
             synchronized (projectList){
                 if (!projectsFile.exists()){
                     projectsFile.createNewFile();
                 }
-                backupMapper.writeValue(projectsFile, projectList);
+                //backupProjectFiles
+                try (Writer writer = new FileWriter(backupDir + "/ProjectsData.json")){
+                    gson.toJson(projectList, writer);
+                }
+
 
                 for (Project project : projectList){
                     project.backup();
@@ -525,7 +539,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                             if (project.searchMember(user)) {
                                                 try {
                                                     System.out.println("nome carta = " + cardName4);
-                                                    Card cardTmp = project.getCard(cardName4);
+                                                    Card cardTmp = project.getCardToSend(cardName4);
                                                     System.out.println("Sono dentro il blocco try di getCardHistory");
                                                     result.setResult("OK");
                                                     result.addSerializedObject("cardHistory", serializeObject(cardTmp.getCardHistory()));
@@ -825,6 +839,8 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
      - la lista dei progetti, inclusi i membri di ciascun progetto, le card e lo stato delle liste
      - una directory per ogni progetto, un file per ogni card, nel file della card vanno inseriti gli spostamenti
      */
+
+
 
 
 
