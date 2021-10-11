@@ -22,7 +22,7 @@ public class ProjectChatSniffer implements Runnable{
         try {
             inetAddress = InetAddress.getByName(MIPAddress);
             multicastSocket = new MulticastSocket();
-            multicastSocket.setSoTimeout(2000);
+            multicastSocket.setSoTimeout(4000);
             //join in the multicastGroup
             multicastSocket.joinGroup(inetAddress);
 
@@ -33,8 +33,9 @@ public class ProjectChatSniffer implements Runnable{
 
                 //receive the packet
                 try {
+                    //System.out.println("Cerco messaggi su: " + MIPAddress);
                     multicastSocket.receive(messageDP);
-
+                    System.out.println("Message received");
                     //add the new message on the chatHistory of this project
                     String message = new String(messageDP.getData());
                     mainClient.addMessage(nameProject, message);

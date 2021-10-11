@@ -30,7 +30,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
 
     //backup
-    private File backupDir, projectsFile, listUsersFile, MIPAddressFile;
+    private File backupDir, projectsFile, listUsersFile, MIPAddressFile, projectBindingFile;
     private Gson gson;
 
 
@@ -39,7 +39,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     private static RMICallbackServerImpl ROS;
     //private static ThreadPoolExecutor executor;
     private static List<Project> projectList; //syncrhonized list
-    private static ConcurrentHashMap<String, ArrayList<Project>> projectMemberBinding; //hashmap that bind a member with his project
+    private static ConcurrentHashMap<String, ArrayList<String>> projectMemberBinding; //hashmap that bind a member with his project
     private static ConcurrentHashMap<String, String> registeredUsersData; //hashmap with username and psw
     private static ConcurrentHashMap<String, String> usersStatus;
     private static HashMap<SocketChannel, String> channelBinding; //hashmap that bind a channel with a user
@@ -58,10 +58,11 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         this.listUsersFile = new File(backupDir + "/UsersData.json");
         this.projectsFile = new File(backupDir + "/ProjectsData.json");
         this.MIPAddressFile = new File(backupDir + "/MIPAddress.json");
+        this.projectBindingFile = new File(backupDir + "/ProjectBinding.json");
 
         usersStatus = new ConcurrentHashMap<String, String>();
         channelBinding = new HashMap<SocketChannel, String>();
-        projectMemberBinding = new ConcurrentHashMap<String, ArrayList<Project>>();
+        projectMemberBinding = new ConcurrentHashMap<String, ArrayList<String>>();
         //executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
         projectList = Collections.synchronizedList(new ArrayList<Project>());
         registeredUsersData = new ConcurrentHashMap<>();
@@ -93,7 +94,13 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                     }catch (NullPointerException e){
                         projectList = Collections.synchronizedList(new ArrayList<Project>());
                     }
-
+                }
+                if (projectBindingFile.exists()){
+                    try {
+                        projectMemberBinding = new ConcurrentHashMap<String, ArrayList<String>>(gson.fromJson(new FileReader(projectBindingFile), projectMemberBinding.getClass()));
+                    } catch (NullPointerException e){
+                        projectMemberBinding = new ConcurrentHashMap<String, ArrayList<String>>();
+                    }
                 }
                 mipManager.restoreMipAddress();
             }
@@ -108,13 +115,23 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
             if (!backupDir.exists()){
                 backupDir.mkdir();
             }
+
             if (!listUsersFile.exists()){
                 listUsersFile.createNewFile();
             }
             //backupUsersData
-            try (Writer writer = new FileWriter(backupDir + "/UsersData.json");){
+            try (Writer writer = new FileWriter(backupDir + "/UsersData.json")){
                 gson.toJson(registeredUsersData, writer);
             }
+
+            if (!projectBindingFile.exists()){
+                projectBindingFile.createNewFile();
+            }
+            //backup projectBinding data
+            try (Writer writer = new FileWriter(backupDir + "/ProjectBinding.json")){
+                gson.toJson(projectMemberBinding, writer);
+            }
+
 
             synchronized (projectList){
                 if (!projectsFile.exists()){
@@ -268,21 +285,25 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                             channelBinding.put(client, arrayStringCommand[1].trim());
 
                                             //Hashmap with all the ip multicast of the projects with the user as a member
-                                            HashMap<String, String> IPBinding = new HashMap<>();
+                                            HashMap<String, String> IPBinding = new HashMap<String, String>();
 
                                             //send the ip multicast of the projects of this member if the member is in some projects
                                             if (projectMemberBinding.containsKey(arrayStringCommand[1])) {
 
                                                 //get the arraylist of projects with the user as a member
-                                                ArrayList<Project> tmpProjectList = projectMemberBinding.get(arrayStringCommand[1]);
+                                                ArrayList<String> tmpProjectList = projectMemberBinding.get(arrayStringCommand[1]);
 
-                                                for (Project projectTmp : tmpProjectList) {
-                                                    IPBinding.putIfAbsent(projectTmp.getProjectName(), projectTmp.getMIPAddress());
+                                                for (String projectTmpName : tmpProjectList) {
+                                                    int i = 0;
+                                                    //get the mipaddress of this project
+                                                    while (projectList.get(i).getProjectName() != projectTmpName && i<projectList.size()-1){
+                                                        i++;
+                                                    }
+                                                    IPBinding.putIfAbsent(projectTmpName, projectList.get(i).getMIPAddress());
                                                 }
 
                                                 result.addSerializedObject("IPBinding", serializeObject(IPBinding));
                                             } else {
-                                                IPBinding = null;
                                                 result.addSerializedObject("IPBinding", serializeObject(IPBinding));
                                             }
                                             key.attach(result);
@@ -511,13 +532,16 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                     if ((project = mainServer.checkProject(nameProject))!= null) {
                                         synchronized (project){
                                             if (project.searchMember(user)) {
-                                                resultMoveOperation = project.moveCard(cardName3, srcList, destList);
-                                                if (resultMoveOperation){
-                                                    result.setResult("OK");
+                                                if (project.searchCard(cardName3) == null){
+                                                    result.setResult("Card not found");
                                                 } else {
-                                                    result.setResult("Wrong list");
+                                                    resultMoveOperation = project.moveCard(cardName3, srcList, destList);
+                                                    if (resultMoveOperation){
+                                                        result.setResult("OK");
+                                                    } else {
+                                                        result.setResult("Wrong list");
+                                                    }
                                                 }
-
                                             } else {
                                                 result.setResult("This user does not belong to this project");
                                             }
@@ -704,6 +728,13 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
         channelBinding.putIfAbsent(client, user);
     }
 
+
+    /**
+     *
+     * @param project
+     * @param user
+     * @return false if the project exist, true otherwise
+     */
     public boolean addProject(Project project, String user){
         //add a multicastIP to the project
         synchronized (projectList){
@@ -717,12 +748,14 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
 
             //update the Arraylist with association project-MIPAddress
             synchronized (projectMemberBinding){
+                //if the user is in the projectMemberBinding update the projectList bind to this user
                 if (projectMemberBinding.containsKey(user)){
-                    projectMemberBinding.get(user).add(project);
+                    projectMemberBinding.get(user).add(project.getProjectName());
                 } else {
-                    ArrayList<Project> tmpArrayList = new ArrayList<>();
-                    tmpArrayList.add(project);
-                    projectMemberBinding.put(user, tmpArrayList);
+                    //if the user is not in the projectMemberBinding (is the first project of this user)
+                    ArrayList<String> tmpArrayList = new ArrayList<String>();
+                    tmpArrayList.add(project.getProjectName());
+                    projectMemberBinding.putIfAbsent(user, tmpArrayList);
                 }
             }
             projectList.add(project);
@@ -745,10 +778,14 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     public HashMap<String, String> getIPBinding(String user){
         HashMap<String, String> IPBinding = new HashMap<>();
         //recuperare l'arraylist dei progetti associati all'utente
-        //per ogni progetto recuperare l'ipmulticast ed inserirlo nella hashmpa insieme al nome del progetto
+        //per ogni progetto recuperare l'ipmulticast ed inserirlo nella hashmap insieme al nome del progetto
         synchronized (projectMemberBinding){
-            for (Project project : projectMemberBinding.get(user)){
-                IPBinding.put(project.getProjectName(), project.getMIPAddress());
+            for (String projectName : projectMemberBinding.get(user)){
+                int i = 0;
+                while (projectList.get(i).getProjectName() != projectName && i<projectList.size()-1){
+                    i++;
+                }
+                IPBinding.put(projectName, projectList.get(i).getMIPAddress());
             }
         }
         return IPBinding;

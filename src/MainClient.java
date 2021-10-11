@@ -54,11 +54,11 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
     private RMICallbackClient ROC;
     private ArrayList<String> listUsers;
     private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
-    public static int DEFAULT_PORT = 5000;
-    public static int DEFAULT_PORT_CALLBACK = 3000;
-    SocketChannel clientChannel = null;
-    RMICallbackServer server;
-    Result resultObjectFromServer;
+    private static final int DEFAULT_PORT = 5000;
+    private static final int DEFAULT_PORT_CALLBACK = 3000;
+    private SocketChannel clientChannel = null;
+    private RMICallbackServer server;
+    private Result resultObjectFromServer;
 
     //CONSTRUCTOR
     public MainClient() {
@@ -66,6 +66,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
         executorChat = (ThreadPoolExecutor) Executors.newCachedThreadPool();
         threadBinding = new HashMap<>();
         messageHistoryProjects = new HashMap<>();
+        IPBinding = new HashMap<String, String>();
     }
 
     /**
@@ -122,7 +123,6 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
         switch (command) {
             case 1:
-                //stranamente funziona
                 register(); //metodo che serve per registrare l'utente e che connette il client al server tramite tcp
                 beforeLoginCommand();
                 break;
@@ -159,14 +159,26 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                         ois.close();
 
                         //read the IPBinding structure
-                        byte[] IPBindingByte = resultObjectFromServer.getSerializedObjectStructure().get(IPBinding);
+                        byte[] IPBindingByte = resultObjectFromServer.getSerializedObjectStructure().get("IPBinding");
                         if (IPBindingByte!=null){
                             ByteArrayInputStream BAISipBinding = new ByteArrayInputStream(IPBindingByte);
                             ois = new ObjectInputStream(BAISipBinding);
                             IPBinding = (HashMap<String, String>) ois.readObject();
                         } else {
-                            IPBinding = new HashMap<>();
+                            IPBinding = new HashMap<String, String>();
+                            System.out.println(IPBinding);
                         }
+
+
+                        if (IPBinding.size()!=0){
+                            //Start a thread for read the chat
+                            IPBinding.forEach((key, value) -> {
+                                System.out.println("start thread chat sniffer: " + value);
+                                ProjectChatSniffer tmp = new ProjectChatSniffer(value, key, this);
+                                threadBinding.putIfAbsent(key, executorChat.submit(tmp));
+                            });
+                        }
+
 
                         lastReadMessageCounters = new HashMap<>();
                         registerForCallback();
@@ -294,8 +306,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                         OISipBinding.close();
 
                         //Start a thread for read the chat
-                        ProjectChatSniffer tmp = new ProjectChatSniffer(IPBinding.get(nameProject), nameProject, this);
-                        threadBinding.putIfAbsent(nameProject, executorChat.submit(tmp));
+//                        ProjectChatSniffer tmp = new ProjectChatSniffer(IPBinding.get(nameProject), nameProject, this);
+//                        threadBinding.putIfAbsent(nameProject, executorChat.submit(tmp));
 
                     }catch (ClassNotFoundException | IOException e){
                         e.printStackTrace();
@@ -509,6 +521,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
                 resultObjectFromServer = receiveResponse();
                 responseString = resultObjectFromServer.getResult();
+                System.out.println(responseString);
 
                 if (responseString.equals("OK")){
                     //send the movement of this card on the chat project
@@ -524,7 +537,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                     }
 
                     System.out.println("Carta spostata correttamente");
-                }else if (responseString.equals("Wrong destination")){
+                }else if (responseString.equals("Wrong list")){
                     System.err.println("Non puoi spostare una card da " + srcList + " a " + destList);
                 }else if (responseString.equals("Card not found")){
                     System.err.println("Carta non trovata");
@@ -626,6 +639,9 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 synchronized (messageHistoryProjects){
                     System.out.println(messageHistoryProjects);
                     if (messageHistoryProjects.containsKey(nameProject)){
+                        System.out.println("Progetto trovato");
+                        System.out.println("lastreadmessage= " + lastReadMessage);
+                        System.out.println("size messagehistoryProject: " + messageHistoryProjects.get(nameProject).size());
                         if (lastReadMessage + 1 != messageHistoryProjects.get(nameProject).size()){
                             for (int i = lastReadMessage + 1; i <= messageHistoryProjects.get(nameProject).size(); i++){
                                 System.out.println("> " + messageHistoryProjects.get(nameProject).get(i));
@@ -892,12 +908,15 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
     //methods for manage chat message
     public void addMessage(String project, String message){
-        if (messageHistoryProjects.containsKey(project)){
-            messageHistoryProjects.get(project).add(message);
-        } else {
-            messageHistoryProjects.put(project, new ArrayList<>());
-            messageHistoryProjects.get(project).add(message);
+        synchronized (messageHistoryProjects){
+            if (messageHistoryProjects.containsKey(project)){
+                messageHistoryProjects.get(project).add(message);
+            } else {
+                messageHistoryProjects.put(project, new ArrayList<>());
+                messageHistoryProjects.get(project).add(message);
+            }
         }
+
 
     }
 
