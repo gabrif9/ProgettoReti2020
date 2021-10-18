@@ -56,6 +56,7 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
     private ConcurrentHashMap<String, String> listOnlineUsers; //e.g.: Dario, Online
     private static final int DEFAULT_PORT = 5000;
     private static final int DEFAULT_PORT_CALLBACK = 3000;
+    private static final int DEFAULT_CHAT_PORT = 6789;
     private SocketChannel clientChannel = null;
     private RMICallbackServer server;
     private Result resultObjectFromServer;
@@ -523,13 +524,13 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 responseString = resultObjectFromServer.getResult();
                 System.out.println(responseString);
 
-                if (responseString.equals("OK")){
+                if (responseString.equals("OK")) {
                     //send the movement of this card on the chat project
                     String messageCardModified = "Messaggio da Worth: " + user + " ha spostato " + cardName3 + " da " + srcList + " a " + destList;
                     try {
-                        DatagramSocket datagramSocket = new DatagramSocket(4656);
-                        byte [] messageData = messageCardModified.getBytes();
-                        DatagramPacket messageDP = new DatagramPacket(messageData, messageData.length, InetAddress.getByName(IPBinding.get(nameProject)), 4656);
+                        DatagramSocket datagramSocket = new DatagramSocket();
+                        byte[] messageData = messageCardModified.getBytes();
+                        DatagramPacket messageDP = new DatagramPacket(messageData, messageData.length, InetAddress.getByName(IPBinding.get(nameProject)), 6789);
                         datagramSocket.send(messageDP);
                         datagramSocket.close();
                     } catch (IOException e) {
@@ -537,6 +538,8 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                     }
 
                     System.out.println("Carta spostata correttamente");
+                }else if (responseString.equals("Card not found in this list")){
+                    System.err.println("La carta non si trova nella lista " + srcList);
                 }else if (responseString.equals("Wrong list")){
                     System.err.println("Non puoi spostare una card da " + srcList + " a " + destList);
                 }else if (responseString.equals("Card not found")){
@@ -598,29 +601,41 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
                 Scanner scannerTmp = new Scanner(System.in);
                 String tmP = scannerTmp.nextLine();
                 String message = user + " ha detto :" + tmP;
+                String MIPAddress = IPBinding.get(nameProject);
+
+                if (MIPAddress == null){
+                    System.err.println("Il progetto non esiste oppure non fai parte del progetto");
+                    operationTerminated();
+                    break;
+                }
 
                 try {
                     //get the multicast ip from the hashmap
                     InetAddress multicastAddress = InetAddress.getByName(IPBinding.get(nameProject));
 
                     //create datagram socket
-                    DatagramSocket datagramSocket = new DatagramSocket(4656);
+                    DatagramSocket datagramSocket = new DatagramSocket();
 
 
                     //create the message and put the message inside the datagramPacket
 
                     byte [] messageData;
                     messageData = message.getBytes();
-                    DatagramPacket messageDP = new DatagramPacket(messageData, messageData.length, multicastAddress, 4656);
+                    System.out.println(datagramSocket.getLocalPort());
+                    DatagramPacket messageDP = new DatagramPacket(messageData, messageData.length, multicastAddress, DEFAULT_CHAT_PORT);
+
+                    //send the datagramPacket through the datagramSocket
                     datagramSocket.send(messageDP);
-                    datagramSocket.close();
+                    //datagramSocket.close();
                     System.out.println("Messaggio inviato a: " + IPBinding.get(nameProject));
                     operationTerminated();
+                    break;
                 } catch (IOException e) {
                     e.printStackTrace();
                 } catch (NullPointerException e){
                     System.out.println("Il progetto non esiste o non fai parte del progetto");
                     operationTerminated();
+                    break;
                 }
 
 
@@ -637,24 +652,18 @@ public class MainClient extends RemoteObject implements RMICallbackClient {
 
 
                 synchronized (messageHistoryProjects){
-                    System.out.println(messageHistoryProjects);
                     if (messageHistoryProjects.containsKey(nameProject)){
-                        System.out.println("Progetto trovato");
-                        System.out.println("lastreadmessage= " + lastReadMessage);
-                        System.out.println("size messagehistoryProject: " + messageHistoryProjects.get(nameProject).size());
-                        if (lastReadMessage + 1 != messageHistoryProjects.get(nameProject).size()){
-                            for (int i = lastReadMessage + 1; i <= messageHistoryProjects.get(nameProject).size(); i++){
+                        //read the message from the last read message
+                        if (lastReadMessage != messageHistoryProjects.get(nameProject).size()){
+                            for (int i = lastReadMessage ; i < messageHistoryProjects.get(nameProject).size(); i++){
                                 System.out.println("> " + messageHistoryProjects.get(nameProject).get(i));
                             }
-                            lastReadMessage = messageHistoryProjects.get(nameProject).size() - 1;
+                            lastReadMessage = messageHistoryProjects.get(nameProject).size();
                         } else System.out.println("Non e' presente nessun nuovo messaggio"); //se ho gia' letto i precedenti messaggi
                     } else System.out.println("Non e' presente alcun messaggio"); //se non e' mai stato scritto un messaggio
-
                 }
                 lastReadMessageCounters.put(nameProject, lastReadMessage);
                 operationTerminated();
-
-
 
 
 

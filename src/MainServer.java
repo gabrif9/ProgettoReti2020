@@ -34,7 +34,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
     private Gson gson;
 
 
-    private MIPManager mipManager;
+    private static MIPManager mipManager;
     private static MainServer mainServer;
     private static RMICallbackServerImpl ROS;
     //private static ThreadPoolExecutor executor;
@@ -369,7 +369,7 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                                         ROS.doCallbacksProjectremoved(member, nameProject);
                                                     }
                                                     projectList.remove(project);
-
+                                                    mipManager.removeMipAddress(project.getMIPAddress());
                                                     result.setResult("Project deleted");
                                                 } else {
                                                     result.setResult("Cannot delete the project, the cards are not all in the toDoList");
@@ -535,12 +535,18 @@ public class MainServer extends RemoteServer implements RegistrationInterface {
                                                 if (project.searchCard(cardName3) == null){
                                                     result.setResult("Card not found");
                                                 } else {
-                                                    resultMoveOperation = project.moveCard(cardName3, srcList, destList);
-                                                    if (resultMoveOperation){
-                                                        result.setResult("OK");
-                                                    } else {
+                                                    try {
+                                                        resultMoveOperation = project.moveCard(cardName3, srcList, destList);
+
+                                                        if (resultMoveOperation){
+                                                            result.setResult("OK");
+                                                        } else {
+                                                            result.setResult("Card not found in this list");
+                                                        }
+                                                    }catch (IllegalArgumentException e){
                                                         result.setResult("Wrong list");
                                                     }
+
                                                 }
                                             } else {
                                                 result.setResult("This user does not belong to this project");

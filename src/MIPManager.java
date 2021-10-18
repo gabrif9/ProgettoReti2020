@@ -93,4 +93,8 @@ public class MIPManager implements Serializable {
             e.printStackTrace();
         }
     }
+
+    public synchronized void removeMipAddress(String MIPAddress){
+        this.MIPAddress.remove(MIPAddress);
+    }
 }
